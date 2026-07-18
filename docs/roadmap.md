@@ -43,16 +43,33 @@ Decided:
       premise for the Bay Area test period (one Earth Engine asset per
       product/orbit; ~14–15 footprint-intersecting orbit-product assets
       per local day) and motivated the research-and-validation gate below.
-      The script remains exploratory and under evaluation — no daily
-      method is decided.
+      **Completed:** its revised contribution audit found only 101 of the
+      1,276 products contributed valid BAAQMD data (57 one-contributor
+      days, 22 two-contributor days, 11 none) and confirmed that Earth
+      Engine masks ignore non-contributing products (all-products vs
+      valid-contributors-only daily means identical on every comparable
+      day).
+- [x] Fifth exploration script — quality, overlap, and coverage
+      sensitivity
+      (`earthengine/exploration/05_s5p_no2_quality_overlap_sensitivity.js`)
+      with sequential 7-day chunked evaluation (prevents the 90-day
+      interactive timeout) and a default range anchored to the latest
+      seven local days available in the OFFL collection. Findings: 9
+      non-NOMINAL products, of which 2 contributed over BAAQMD;
+      excluding them changed 2023-01-20 and removed all valid data on
+      2023-02-15 — so non-NOMINAL products are flagged and retained,
+      never silently excluded. No coverage threshold or
+      processor-correction method was selected; further detailed
+      product-level investigation is deferred.
 
 Still open:
 
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
-- [ ] Work through the research-and-validation gate below — the temporal
-      unit, daily contributor rule, combination rule, scale, and coverage
-      handling are all decided there (open decisions listed in
+- [ ] Remaining gate work (future, non-blocking for the next exploratory
+      feature): the coverage-threshold decision, the final analysis
+      scale, the historical-homogeneity decision, and the R
+      surface-monitor validation workflow (see the gate status below and
       [methodology.md](methodology.md))
 
 ## Phase 1 — Basic Earth Engine app structure
@@ -91,10 +108,30 @@ reviewable; no threshold or method is adopted in advance (details in
 10. Only after corroboration rules are established may the project
     classify a result as a candidate air-quality episode.
 
+**Gate status (2026-07-18).** Explorations 04 and 05 completed steps 1–6
+sufficiently for the current project stage: the accepted **working**
+daily rule and the practical PRODUCT_QUALITY policy are recorded in
+[methodology.md](methodology.md) and `earthengine/README.md` (practical,
+not scientifically final). Step 7 (the R surface-monitor validation
+workflow), the coverage-threshold decision (beyond the script 05
+sensitivity scenarios), and step 8 (historical homogeneity) remain
+future work but are **not blockers** for the next exploratory feature.
+Steps 9–10 still gate any final baseline method and any episode
+classification.
+
+### Next implementation phase (approved, not yet implemented)
+
+- [ ] Exploratory historical baseline and **satellite-column anomaly**
+      visualization — still **not** Episode Finder classification; no
+      health or AQI interpretation; candidate anomalies must remain
+      clearly labeled as satellite-column anomalies.
+
 ## Phase 2 — Baseline and anomaly views
 
-**Paused, not abandoned.** Begins only after the research and validation
-gate above is complete (see [methodology.md](methodology.md)).
+**Partially unblocked.** The exploratory historical baseline and
+satellite-column anomaly visualization above is approved; the final
+baseline definition and the rest of this phase still follow the
+remaining gate steps (see [methodology.md](methodology.md)).
 
 - [ ] Baseline definition decided and documented in
       [methodology.md](methodology.md)

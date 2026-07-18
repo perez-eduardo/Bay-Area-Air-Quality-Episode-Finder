@@ -120,6 +120,13 @@ as assimilation or model comparisons using averaging kernels — it is
 original Level-2 `qa_value`, so neither filter can presently be reapplied
 inside this app (see the next subsection).
 
+**Observed (script 05 live test; 2023-01-01 to 2023-04-01 test period).**
+9 of 1,276 products carried a non-NOMINAL `PRODUCT_QUALITY`
+("DEGRADED"), of which only 2 contributed valid BAAQMD data; excluding
+non-NOMINAL products changed the daily result on 2023-01-20 and removed
+all valid data on 2023-02-15. Project policy: flag and retain, never
+silently exclude (see [methodology.md](methodology.md)).
+
 #### Level-3 limitations and metadata to audit
 
 **Checked (catalog page, 2026-07-18).** The current catalog page documents

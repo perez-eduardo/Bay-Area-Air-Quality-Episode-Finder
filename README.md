@@ -8,13 +8,15 @@ reasoning behind any interpretation of them. **Episode detection** — scanning 
 data for periods that look unusually poor, persistent, and widespread — is one
 planned feature of the dashboard, not the only one.
 
-> **Status: early data exploration and method validation.**
-> The dashboard app is not built yet. Four Earth Engine exploration
-> scripts exist (see `earthengine/`), the calendar-day method for the
-> Sentinel-5P NO₂ evidence source is still **under evaluation**, and a
-> research-and-validation gate in [docs/roadmap.md](docs/roadmap.md) now
-> precedes any baseline, anomaly, or episode work. No current feature
-> detects episodes.
+> **Status: preprocessing explorations complete; dashboard features next.**
+> The dashboard app is not built yet. Five Earth Engine exploration
+> scripts exist (see `earthengine/`); the preprocessing investigation is
+> closed with an accepted **working** daily rule (practical, not final),
+> and the next planned feature is an exploratory historical baseline and
+> **satellite-column anomaly** visualization — still not episode
+> classification, with no health or AQI interpretation (see
+> [docs/roadmap.md](docs/roadmap.md)). No current feature detects
+> episodes.
 
 ## What this project is
 
@@ -55,15 +57,18 @@ AQI, health risk, or per-road/per-facility attribution. The exploration
 scripts' charts are exploratory: scripts 01–02 plot one point per raw
 Earth Engine collection member (an **orbit-product asset**; many can
 intersect the region's footprint on one day without contributing valid
-data), and scripts 03–04 explore **provisional** calendar-day methods that
-are still under evaluation. The initial Sentinel-5P analytical feature
+data), and scripts 03–05 developed the calendar-day approach now adopted
+as a **working rule** (practical, not final; satellite NO₂ remains a
+column-density evidence layer, never AQI, surface concentration, or an
+episode declaration). The initial Sentinel-5P analytical feature
 carries the cautious working description **"Satellite NO₂ Column Anomaly
 Explorer"**; the broader "candidate air-quality episode" label will
 require corroborating evidence later (ground monitors, persistence,
 coverage, meteorological context), and neither the repository nor the
-final product is renamed without an explicit owner decision. Before any
-baseline or anomaly work, the project must pass the preprocessing and
-validation gate in [docs/roadmap.md](docs/roadmap.md) (details in
+final product is renamed without an explicit owner decision. The
+preprocessing gate in [docs/roadmap.md](docs/roadmap.md) is sufficiently
+complete for the next exploratory feature; coverage sensitivity and
+formal surface-monitor validation remain future work (details in
 [docs/methodology.md](docs/methodology.md)). No current feature detects
 episodes.
 

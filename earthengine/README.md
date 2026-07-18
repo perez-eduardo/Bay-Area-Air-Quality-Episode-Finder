@@ -35,15 +35,22 @@ developed and run through the Earth Engine Code Editor.
   **Exploration only** — no baselines, anomalies, episode detection,
   thresholds, scoring, or modeling.
 - `exploration/04_s5p_no2_product_daily_method.js` — fourth
-  data-exploration script: filters by Bay Area local calendar dates
-  (America/Los_Angeles), groups collection members by `PRODUCT_ID`,
-  reports product/orbit metadata, and compares a product-aware daily
-  series against the script-03-style raw daily mean (see
-  [Collection model and exploration 04](#collection-model-and-exploration-04)
-  below). Its live test **disproved** its original
-  multiple-tiles-per-product premise; the script remains exploratory and
-  under evaluation. **Exploration only** — no baselines, anomalies,
-  episode detection, thresholds, scoring, or modeling.
+  data-exploration script (**completed**): orbit-product contribution
+  audit. Filters by Bay Area local calendar dates (America/Los_Angeles),
+  reconstructs products defensively by `PRODUCT_ID`, measures each
+  product's actual valid contribution over BAAQMD, audits processing
+  metadata, and compares an all-products daily mean against a
+  valid-contributors-only daily mean (see
+  [Completed explorations 04 and 05](#completed-explorations-04-and-05)
+  below). **Exploration only** — no baselines, anomalies, episode
+  detection, thresholds, scoring, or modeling.
+- `exploration/05_s5p_no2_quality_overlap_sensitivity.js` — fifth
+  data-exploration script (**completed**): product quality,
+  dual-contributor overlap, and coverage sensitivity, with sequential
+  seven-day chunked evaluation for long ranges and a default range
+  anchored to the latest local date available in the OFFL collection.
+  **Exploration only** — no baselines, anomalies, episode detection,
+  thresholds, scoring, or modeling.
 
 ## Running a script in the Code Editor
 
@@ -224,46 +231,88 @@ of calendar days with a valid daily regional mean; and the min/median/max
 number of source images per source-image day. A raw collection image is
 never described as a daily observation.
 
-## Collection model and exploration 04
+## Completed explorations 04 and 05
 
-`exploration/04_s5p_no2_product_daily_method.js` was written to test the
-hypothesis that normal Bay Area collection members are multiple tiles of
-one daily product. **The live test rejected that hypothesis.** Observed
-(default period, local dates 2023-01-01 to 2023-04-01 — one region and
-period, not proof of global collection behavior): 1,276 raw Earth Engine
-assets containing 1,276 distinct `PRODUCT_ID` values and 1,276 distinct
-`ORBIT` values — one returned asset per product/orbit — with roughly
-14–15 orbit-product assets assigned to each local calendar day.
+Both scripts are **completed explorations** whose live tests (default
+2023-01-01 to 2023-04-01 test period — one region and period, not proof
+of global collection behavior) closed the preprocessing investigation.
+Full corrected collection model in
+[docs/data-sources.md](../docs/data-sources.md).
 
-Consequences (full corrected collection model in
-[docs/data-sources.md](../docs/data-sources.md)):
+**Exploration 04 established:**
 
-- A normal Bay Area collection member is an **orbit-product asset** (a
-  single-orbit Level-3 asset) — not, in general, a tile. The official
-  exception: an antimeridian-spanning product may appear as two Earth
-  Engine assets, so grouping by `PRODUCT_ID` remains a defensive
-  reconstruction step (a no-op in the Bay Area test).
-- `filterBounds(BAAQMD)` only means an asset's geometry or footprint
-  intersects the study region — it does **not** prove the asset contains
-  unmasked, valid NO₂ retrievals over BAAQMD. The meaningful daily
-  contributor count is the number of orbit products with **valid pixels
-  over BAAQMD**, not the number of collection members assigned to a date.
-- Script 04's in-code "tile" terminology (`tile_count`,
-  region-intersecting tile counts) predates the live test; correcting it
-  is step 1 of the research-and-validation gate in
-  [docs/roadmap.md](../docs/roadmap.md). The script remains useful for
-  auditing product metadata and valid regional contribution, and remains
-  **exploratory — no daily method is decided**.
+- Normal Bay Area collection members are **orbit-product assets**, not
+  multiple tiles of one product: 1,276 raw assets contained 1,276
+  distinct `PRODUCT_ID` values and 1,276 distinct `ORBIT` values — one
+  asset per product. Grouping by `PRODUCT_ID` remains a defensive step
+  for the official antimeridian two-asset exception.
+- `filterBounds(BAAQMD)` is footprint intersection only: of the 1,276
+  products, only **101 actually contributed** valid unmasked NO₂ data
+  over BAAQMD — 57 days had one valid contributor, 22 days had two, and
+  11 days had none.
+- Products without valid BAAQMD pixels do not change the daily result —
+  Earth Engine masks ignore them; the all-products and
+  valid-contributors-only daily means were **identical on every
+  comparable day**.
+
+**Exploration 05 established:**
+
+- Sequential 7-day chunked evaluation prevents the 90-day interactive
+  timeout (long ranges are split into consecutive local-date chunks and
+  combined client-side).
+- The rolling default correctly uses the latest seven Bay Area local
+  calendar days represented in the OFFL collection (OFFL publication
+  lags real time).
+- The 2023 test period contained **9 non-NOMINAL products**, of which
+  only **2 actually contributed** over BAAQMD. Excluding non-NOMINAL
+  products changed the daily result on **2023-01-20** and removed all
+  valid data on **2023-02-15** — so non-NOMINAL products must not be
+  automatically discarded; affected dates are flagged and retained for
+  transparency.
+- No final minimum-coverage threshold and no final processor-correction
+  method were selected; no further detailed product-level investigation
+  is required at the current project stage.
+
+### Practical PRODUCT_QUALITY policy
+
+A **project policy, not a claim that degraded products are
+scientifically equivalent to nominal products**: the exploratory daily
+series uses valid masked Sentinel-5P observations regardless of
+`PRODUCT_QUALITY`; quality metadata is retained and displayed; days
+containing contributing non-NOMINAL products are **flagged**, never
+silently excluded; and flagged days are not treated as equally reliable
+without qualification. A future formal analysis may compare all-quality
+and NOMINAL-only variants, but that is not required before continuing
+the dashboard project.
+
+### Accepted working daily rule
+
+The accepted working rule for the next implementation phase — **not** a
+scientifically final rule for all future work:
+
+- Bay Area local calendar dates (`America/Los_Angeles`);
+- defensive `PRODUCT_ID` reconstruction (antimeridian exception);
+- pixel-wise arithmetic mean of same-date orbit products, relying on
+  Earth Engine masks so non-contributing products do not affect the
+  daily image;
+- valid-area fraction calculated and retained for every daily regional
+  statistic;
+- valid negative retrievals preserved;
+- `EPSG:3310` at 7000 m as **current exploration settings**, not final
+  universal resolution claims.
+
+Coverage-threshold sensitivity follow-up and formal surface-monitor
+validation remain future work — not blockers for the next exploratory
+feature.
 
 ## Next milestone
 
-The next approved test is step 1 of the research-and-validation gate in
-[docs/roadmap.md](../docs/roadmap.md): correct script 04's terminology and
-identify the products with **actual valid BAAQMD contribution** (valid
-pixels, valid area, valid-area fraction per product), followed by the
-product-metadata audit (processing status, product quality, processor and
-algorithm versions, spatial resolution). No baseline, anomaly, or episode
-work is approved before the gate completes.
+The preprocessing gate is sufficiently complete to begin the next
+dashboard feature: **exploratory historical baseline and
+satellite-column anomaly visualization** — still **not** Episode Finder
+classification, with no health or AQI interpretation, and candidate
+anomalies clearly labeled as **satellite-column anomalies** (see
+[docs/roadmap.md](../docs/roadmap.md)). Not yet implemented.
 
 The Phase 1 app structure in [docs/roadmap.md](../docs/roadmap.md) — map,
 indicator selector, time series, placeholder episode summary, and visible

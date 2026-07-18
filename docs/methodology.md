@@ -77,12 +77,29 @@ collection — as in exploration scripts 01 and 02 — is an exploratory
 **collection-member-level** series; it is not the final daily time series
 that episode analysis will use.
 
-Status of the daily-method explorations: script 03's arithmetic-mean daily
-composite is **provisional**; script 04's product-aware method is **under
-evaluation** — its original premise (that normal Bay Area collection
-members are multiple tiles of one daily product) was **disproved** by the
-live test, but the script remains useful for auditing product metadata and
-valid regional contribution. Neither is a decided method.
+**Status (updated 2026-07-18): explorations 04 and 05 are completed.**
+Script 04's contribution audit (**Observed**, 2023 test period) found
+that only 101 of 1,276 footprint-intersecting products contributed valid
+BAAQMD data (57 one-contributor days, 22 two-contributor days, 11 none)
+and confirmed that Earth Engine masks ignore non-contributing products —
+all-products vs valid-contributors-only daily means were identical on
+every comparable day. Script 05 added the quality, overlap, and
+coverage-sensitivity findings plus sequential 7-day chunked evaluation
+(a 90-day single evaluation times out interactively). On that basis the
+project adopts an **accepted working daily rule for the next
+implementation phase** — practical, **not** a scientifically final rule
+for all future work:
+
+- Bay Area local calendar dates (America/Los_Angeles);
+- defensive PRODUCT_ID reconstruction (antimeridian exception);
+- pixel-wise arithmetic mean of same-date orbit products, relying on
+  Earth Engine masks so non-contributing products do not affect the
+  daily image;
+- valid-area fraction calculated and retained for every daily regional
+  statistic;
+- valid negative retrievals preserved;
+- EPSG:3310 at 7000 m as current exploration settings only, not final
+  universal resolution claims.
 
 Before baselines, anomalies, persistence checks, or episode detection can be
 defined, the project needs a stable calendar-day temporal unit. The
@@ -149,9 +166,16 @@ choices remain owner decisions (see the open decisions above):
 
 ## Preprocessing and quality-audit plan (before any baseline or episode work)
 
-**Planned.** This preprocessing must be evaluated before baseline or
-episode development. Nothing in this section is an adopted method; each
-subsection ends in an owner decision.
+**Status (updated 2026-07-18).** Explorations 04–05 completed this
+plan's product-metadata audit, actual-contribution measurement, quality
+comparison, and initial coverage-sensitivity scenarios; the practical
+PRODUCT_QUALITY policy below was adopted, and further detailed
+product-level investigation is **deferred**. The preprocessing gate is
+sufficiently complete to begin the next exploratory dashboard feature
+(see [roadmap.md](roadmap.md)). Coverage-threshold selection and formal
+surface-monitor validation remain future work — not blockers. Where the
+subsections below say a rule is open, that remains true for the final
+scientific method.
 
 ### Product metadata audit
 
@@ -160,8 +184,23 @@ Inspect and summarize, for every orbit-product asset in a study period:
 `PROCESSOR_VERSION`, `ALGORITHM_VERSION`, `SPATIAL_RESOLUTION`, the
 acquisition time, and the derived local calendar date. Do **not** assume
 the exact string used for a nominal status until actual metadata values
-are inspected. Degraded or non-nominal products may later be excluded or
-flagged — that rule is **Open**, not yet decided.
+are inspected. The exclusion/flagging question is resolved practically by
+the adopted PRODUCT_QUALITY policy below; a final formal rule remains
+optional future work.
+
+### Practical PRODUCT_QUALITY policy (adopted)
+
+**Project policy — not a claim that degraded products are scientifically
+equivalent to nominal products.** The exploratory daily series uses
+valid masked Sentinel-5P observations **regardless of PRODUCT_QUALITY**;
+quality metadata is retained and displayed; days containing contributing
+non-NOMINAL products are **flagged** and kept, never silently excluded;
+and flagged days are not treated as equally reliable without
+qualification. **Observed (script 05, 2023 test period):** 9 non-NOMINAL
+products, of which 2 contributed over BAAQMD; excluding them changed the
+daily result on 2023-01-20 and removed all valid data on 2023-02-15. A
+future formal all-quality vs NOMINAL-only comparison is optional, not
+required before continuing the dashboard project.
 
 ### Actual BAAQMD contribution
 
