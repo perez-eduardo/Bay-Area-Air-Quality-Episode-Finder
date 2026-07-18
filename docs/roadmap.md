@@ -31,6 +31,14 @@ Still open:
 
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
+- [ ] **Next analytical milestone** — daily temporal standardization
+      (`earthengine/exploration/03_s5p_no2_daily_composites.js`): inspect
+      the raw temporal structure of the Sentinel-5P collection; count source
+      images by calendar date; create one provisional calendar-day composite
+      per usable date, preserving `system:time_start`; compare the raw
+      image-level chart with a daily chart; report the number of calendar
+      days with usable data; evaluate the consequences of the provisional
+      compositing method (see [methodology.md](methodology.md))
 
 ## Phase 1 — Basic Earth Engine app structure
 
@@ -45,6 +53,10 @@ Matches the overview's "initial build direction": structure before modeling.
 - [ ] Links to GitHub and documentation
 
 ## Phase 2 — Baseline and anomaly views
+
+Begins only after the temporal unit and the final daily compositing approach
+have been evaluated (see the script 03 milestone in Phase 0 and
+[methodology.md](methodology.md)).
 
 - [ ] Baseline definition decided and documented in
       [methodology.md](methodology.md)

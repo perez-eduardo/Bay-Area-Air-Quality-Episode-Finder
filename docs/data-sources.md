@@ -12,11 +12,25 @@ the evaluation checklist at the bottom and is approved by the project owner.
 - **Decided (2026-07-17):** Sentinel-5P TROPOMI **OFFL** tropospheric NO₂ via
   the Earth Engine dataset `COPERNICUS/S5P/OFFL/L3_NO2`, band
   `tropospheric_NO2_column_number_density` (units: mol/m²).
-- Catalog notes: the L3 grid is ~1113 m; the catalog describes quality
-  filtering applied during L3 generation (TODO: record the exact filter
-  details when documenting limitations); OFFL NO₂ imagery is available from
-  late June 2018 onward.
-- TODO: record dataset-specific limitations in
+- **What the band is:** a **tropospheric vertical NO₂ column** — the amount
+  of NO₂ in the tropospheric part of the atmospheric column, per unit area.
+  It is not a surface concentration, not an AQI value, not a health
+  category, and not an official air-quality advisory.
+- **Level-3 ingestion (per the official Earth Engine Data Catalog):** the
+  catalog describes the L3 ingestion process as filtering the source data,
+  merging it into mosaics, and producing raster tiles. For the selected band
+  the catalog records the ingestion validity filter
+  `tropospheric_NO2_column_number_density_validity > 50`. The L3 grid is
+  ~1113 m; OFFL NO₂ imagery is available from late June 2018 onward.
+- **Temporal structure (important):** a raw image in this Earth Engine
+  collection must **not** be described as one daily observation. Several
+  collection images can carry the same calendar date, and more than one of
+  them may intersect the BAAQMD region on that date. A count of raw
+  collection images is therefore not a count of days or of independent
+  daily observations. The final calendar-day compositing method is an open
+  owner decision — see
+  [methodology.md](methodology.md#temporal-unit-and-daily-compositing-open).
+- TODO: record further dataset-specific limitations in
   [methodology.md](methodology.md) as exploration reveals them (column vs.
   ground-level, cloud/retrieval coverage gaps, seasonal coverage differences).
 

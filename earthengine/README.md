@@ -10,17 +10,20 @@ developed and run through the Earth Engine Code Editor.
 
 - `exploration/01_s5p_no2_exploration.js` — first data-exploration script.
   Displays the study-region boundary, a mean Sentinel-5P OFFL tropospheric
-  NO₂ layer for a configurable date range, a regional time-series chart, and
-  a data-availability note. **Exploration only** — no episode detection,
-  thresholds, scoring, or modeling.
+  NO₂ layer for a configurable date range, a regional time-series chart
+  (image-level and exploratory; see
+  [Temporal behavior](#temporal-behavior-of-scripts-01-and-02-image-level-exploratory)
+  below), and a data-availability note. **Exploration only** — no episode
+  detection, thresholds, scoring, or modeling.
 - `exploration/02_s5p_no2_display_modes.js` — second data-exploration
   script, focused on the spatial readability of the NO₂ map. Keeps the
   boundary, date controls, chart, and data-availability / no-data handling
   from script 01 unchanged in behavior, and adds a selector with two map
   display modes — an absolute fixed-scale view and a relative
   period-stretched view (see [Display modes](#display-modes-exploration-02)
-  below). **Exploration only** — no episode detection, thresholds, scoring,
-  or modeling.
+  below). Its chart and image count are image-level and exploratory, like
+  script 01's. **Exploration only** — no episode detection, thresholds,
+  scoring, or modeling.
 
 ## Running a script in the Code Editor
 
@@ -49,6 +52,35 @@ county approximation (Solano and Sonoma included in full, which overstates
 the jurisdiction's northern extent). The fallback prints a console warning
 and adds a note to the side panel. See
 [docs/data-sources.md](../docs/data-sources.md) for details.
+
+## Temporal behavior of scripts 01 and 02 (image-level, exploratory)
+
+Both scripts work directly on the raw `COPERNICUS/S5P/OFFL/L3_NO2`
+collection. A raw collection image is **not one daily observation**: several
+collection images can carry the same calendar date, and more than one of
+them may intersect the BAAQMD region on that date. Consequences:
+
+- The "N images" count in the status line counts raw collection images. It
+  is **not** a count of days or of independent daily observations.
+- The time-series chart plots one point per raw collection image. It is an
+  exploratory **image-level** series, not the final daily time series that
+  episode analysis will use. The final calendar-day compositing method is an
+  open owner decision; the planned script 03 (see
+  [Next milestone](#next-milestone)) explores it.
+- The image-level chart requests an explicit 5000 m scale through
+  `ui.Chart.image.series`; it does not use `bestEffort`.
+- The coverage diagnostic uses `reduceRegion()` with `bestEffort` — an
+  exploratory UI diagnostic only. In script 02, the relative-display
+  percentile calculation also uses `reduceRegion()` with `bestEffort` — an
+  exploratory visualization calculation only. Final scientific reductions
+  will use an explicit, stable, documented scale without `bestEffort` (see
+  [docs/methodology.md](../docs/methodology.md)).
+
+Dataset details — including the catalog's Level-3 ingestion description
+(filtering source data, merging it into mosaics, and producing raster tiles)
+and the ingestion validity filter
+`tropospheric_NO2_column_number_density_validity > 50` for the selected
+band — are recorded in [docs/data-sources.md](../docs/data-sources.md).
 
 ## Display modes (exploration 02)
 
@@ -106,6 +138,16 @@ surface, single hue).
 
 ## Next milestone
 
-Phase 1 in [docs/roadmap.md](../docs/roadmap.md): the basic app structure —
-map, indicator selector, time series, placeholder episode summary, and
-visible methodology/limitations notes.
+`exploration/03_s5p_no2_daily_composites.js` (planned) — daily temporal
+standardization. Purpose: inspect the raw temporal structure of the
+Sentinel-5P collection; count source images by calendar date; create one
+provisional calendar-day composite per usable date, preserving
+`system:time_start`; compare the raw image-level chart with a daily chart;
+report the number of calendar days with usable data; and evaluate the
+consequences of the provisional compositing method. Historical baseline and
+anomaly development begins only after the temporal unit and the final daily
+compositing approach have been evaluated.
+
+The Phase 1 app structure in [docs/roadmap.md](../docs/roadmap.md) — map,
+indicator selector, time series, placeholder episode summary, and visible
+methodology/limitations notes — remains the next app-structure milestone.

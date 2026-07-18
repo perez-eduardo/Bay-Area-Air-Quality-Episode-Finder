@@ -24,7 +24,9 @@ Planned components and how they fit together. Nothing here is implemented yet.
 - Remaining datasets (reanalysis, ground monitors) — candidates only until
   evaluated and approved (see [data-sources.md](data-sources.md))
 - Landing-page stack; domain/subdomain; Earth Engine app publish settings
-- All methodological criteria (see [methodology.md](methodology.md))
+- All methodological criteria, including the calendar-day temporal unit, the
+  daily compositing rule, and the final analysis scale (see
+  [methodology.md](methodology.md))
 
 ## Components
 
@@ -61,6 +63,12 @@ Planned dashboard sections (from the project overview):
 **Decided:** the app is built with the **Earth Engine JavaScript API** and
 developed and published through the **Earth Engine Code Editor**.
 
+The planned data-processing flow (raw Sentinel-5P collection → calendar-day
+composites → analysis images → regional statistics and later
+baseline/anomaly products → display images and UI layers) and the strict
+separation between analysis processing and display processing are
+documented in [methodology.md](methodology.md).
+
 ### Analysis layer (`analysis/`)
 
 Supporting analysis and validation, not the app runtime. R is the planned
@@ -84,6 +92,23 @@ TODO: choose the stack (static HTML vs. a small framework). Keep it minimal.
 - AWS Route 53 — DNS (the project owner's domain is managed there)
 
 TODO: domain/subdomain choice; publish settings for the Earth Engine app.
+
+## Performance and precomputation (planned)
+
+Planned scalability posture. Precomputation is a **planned option**, not a
+decision to implement immediately:
+
+- Short exploratory date ranges may continue to be computed interactively.
+- Multi-year calendar-day products, historical baselines, anomaly layers,
+  and automatic episode scans may become too expensive for repeated
+  interactive computation.
+- Reusable expensive results may later be produced through Earth Engine
+  **batch exports** and stored as **Earth Engine assets**.
+- A public Earth Engine App should consume lightweight, reusable products
+  when needed to remain responsive.
+- The official BAAQMD boundary asset must be readable by the published Earth
+  Engine App before public deployment (publish settings are an open TODO
+  above).
 
 ## Development approach
 

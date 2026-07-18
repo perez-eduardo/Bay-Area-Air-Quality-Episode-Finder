@@ -8,9 +8,10 @@ reasoning behind any interpretation of them. **Episode detection** — scanning 
 data for periods that look unusually poor, persistent, and widespread — is one
 planned feature of the dashboard, not the only one.
 
-> **Status: planning / documentation phase.**
-> No application code exists yet. This repository currently holds the project
-> concept, methodology notes, and planned structure.
+> **Status: planning / early data exploration.**
+> The dashboard app is not built yet. This repository holds the project
+> concept, methodology notes, planned structure, and the first Earth Engine
+> data-exploration scripts (see `earthengine/`).
 
 ## What this project is
 
@@ -44,6 +45,14 @@ documents its assumptions and uncertainty.
 | Methodology / "under the hood" section in the app | Planned |
 | R-based validation notebook | Planned (later phase) |
 | PM2.5 estimation, machine learning | Optional (much later; see roadmap) |
+
+The exploration scripts' current charts are **exploratory image-level
+series**: each chart point is one raw Sentinel-5P collection image, and
+several collection images can share the same calendar date. They are not the
+final daily time series that episode analysis will use. The next analytical
+milestone is **daily temporal standardization**
+(`earthengine/exploration/03_s5p_no2_daily_composites.js`; see
+[docs/roadmap.md](docs/roadmap.md)). No current feature detects episodes.
 
 ## Repository layout
 
