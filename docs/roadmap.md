@@ -22,6 +22,10 @@ Decided:
       (`projects/thematic-carver-502603-k5/assets/ca_air_district_boundaries`,
       filter `Air_Distri == "BAY AREA AQMD"`) and used by the exploration
       script; the county approximation remains only as a fallback
+- [x] Second exploration script with two map display modes — absolute
+      fixed-scale and relative period-stretched views
+      (`earthengine/exploration/02_s5p_no2_display_modes.js`); purpose and
+      limitations of both modes documented in `earthengine/README.md`
 
 Still open:
 
