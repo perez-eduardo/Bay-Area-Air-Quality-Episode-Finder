@@ -24,6 +24,16 @@ developed and run through the Earth Engine Code Editor.
   below). Its chart and image count are image-level and exploratory, like
   script 01's. **Exploration only** — no episode detection, thresholds,
   scoring, or modeling.
+- `exploration/03_s5p_no2_daily_composites.js` — third data-exploration
+  script: raw temporal structure and **provisional** calendar-day
+  composites (see
+  [Daily composites (exploration 03)](#daily-composites-exploration-03)
+  below). Charts the raw image-level regional mean against a provisional
+  daily-mean series, reports calendar-day coverage, and displays both
+  period means on one shared fixed display scale. The daily compositing
+  method used is provisional — **not** the final approved method.
+  **Exploration only** — no baselines, anomalies, episode detection,
+  thresholds, scoring, or modeling.
 
 ## Running a script in the Code Editor
 
@@ -33,7 +43,9 @@ developed and run through the Earth Engine Code Editor.
 3. Click **Run**. The map centers on the study region and shows the boundary
    and the mean NO₂ layer; a side panel shows explanatory text, date
    controls, a data-availability note, and the time-series chart. Script 02
-   additionally shows a display-mode selector and a mode-specific legend.
+   additionally shows a display-mode selector and a mode-specific legend;
+   script 03 shows a layer selector, a temporal-coverage summary, and two
+   charts.
 4. Change the date range in the panel's date boxes and click **Update** — or
    edit the `CONFIG` block at the top of the script and re-run.
 
@@ -65,8 +77,8 @@ them may intersect the BAAQMD region on that date. Consequences:
 - The time-series chart plots one point per raw collection image. It is an
   exploratory **image-level** series, not the final daily time series that
   episode analysis will use. The final calendar-day compositing method is an
-  open owner decision; the planned script 03 (see
-  [Next milestone](#next-milestone)) explores it.
+  open owner decision; script 03 explores a provisional daily mean (see
+  [Daily composites (exploration 03)](#daily-composites-exploration-03)).
 - The image-level chart requests an explicit 5000 m scale through
   `ui.Chart.image.series`; it does not use `bestEffort`.
 - The coverage diagnostic uses `reduceRegion()` with `bestEffort` — an
@@ -136,17 +148,67 @@ Both ramps were checked with a palette validator during development
 (monotone lightness, visible step gaps, light-end contrast against a light
 surface, single hue).
 
+## Daily composites (exploration 03)
+
+`exploration/03_s5p_no2_daily_composites.js` inspects the raw temporal
+structure of the collection and compares the image-level series with a
+**provisional** calendar-day series. The daily compositing method used here
+(arithmetic mean of each date's raw images) is an exploratory placeholder so
+the comparison can be inspected — it is **not** the final approved method,
+which remains an open owner decision along with the final analysis scale,
+regional reducer, and weighting behavior (see
+[docs/methodology.md](../docs/methodology.md)).
+
+How the daily collection is built — fully server-side (an `ee.List` of day
+offsets is mapped with `dropNulls`; no client-side loop touches Earth Engine
+computation):
+
+- For every calendar date in the selected range, the raw collection is
+  filtered to that date and the source images are counted.
+- Dates with at least one source image get one provisional composite — the
+  arithmetic mean of that date's raw images — carrying the properties
+  `system:time_start` (start of the calendar date), `date_string`
+  (`YYYY-MM-dd`), and `source_image_count`.
+- Dates with no source image are excluded from the daily collection but are
+  still counted in the panel summary as days with no source image.
+
+Terminology: a **source-image day** is a calendar date with at least one raw
+collection image intersecting the region — not necessarily a day with
+usable NO₂ data. Its provisional daily regional mean can still be null when
+every relevant pixel over the region is masked (e.g., clouds or quality
+filtering); only days with a non-null regional mean are called
+**valid/usable days** in the UI. The valid-day counts are derived from the
+same evaluated regional-mean results that feed the chart — no extra
+reduction pass is made for the summary.
+
+Analysis/display separation, per [docs/methodology.md](../docs/methodology.md):
+raw and daily analysis images stay **unclipped**, and the regional reducers
+receive the BAAQMD geometry directly at an explicit 5000 m scale with no
+`bestEffort` and no `reproject()` — both chart series (raw image-level
+regional mean and provisional daily regional mean) are computed this way.
+Only the two map layers (period mean of the raw collection, period mean of
+the provisional daily composites) are clipped, and both use one shared fixed
+display stretch (0 to 2.0 × 10⁻⁴ mol/m²) so their spatial patterns can be
+compared visually. The 5000 m scale is itself an exploration-stage choice;
+the final analysis scale is undecided.
+
+The panel summary distinguishes collection presence from usable data. It
+reports: total raw images intersecting the study region; total calendar
+days in the range; days with at least one source image; days with no
+source image; days with a valid (non-null) provisional daily regional
+mean; days with source images but no valid regional mean; the percentage
+of calendar days with a valid daily regional mean; and the min/median/max
+number of source images per source-image day. A raw collection image is
+never described as a daily observation.
+
 ## Next milestone
 
-`exploration/03_s5p_no2_daily_composites.js` (planned) — daily temporal
-standardization. Purpose: inspect the raw temporal structure of the
-Sentinel-5P collection; count source images by calendar date; create one
-provisional calendar-day composite per usable date, preserving
-`system:time_start`; compare the raw image-level chart with a daily chart;
-report the number of calendar days with usable data; and evaluate the
-consequences of the provisional compositing method. Historical baseline and
-anomaly development begins only after the temporal unit and the final daily
-compositing approach have been evaluated.
+Script 03 exists and remains exploratory. The next analytical step is the
+owner's evaluation of the provisional daily-compositing results and the
+temporal-unit decisions listed in
+[docs/methodology.md](../docs/methodology.md) — the daily compositing
+method is **not** decided. Historical baseline and anomaly development
+begins only after those decisions are made.
 
 The Phase 1 app structure in [docs/roadmap.md](../docs/roadmap.md) — map,
 indicator selector, time series, placeholder episode summary, and visible

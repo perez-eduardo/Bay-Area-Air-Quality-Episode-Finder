@@ -49,9 +49,10 @@ documents its assumptions and uncertainty.
 The exploration scripts' current charts are **exploratory image-level
 series**: each chart point is one raw Sentinel-5P collection image, and
 several collection images can share the same calendar date. They are not the
-final daily time series that episode analysis will use. The next analytical
-milestone is **daily temporal standardization**
-(`earthengine/exploration/03_s5p_no2_daily_composites.js`; see
+final daily time series that episode analysis will use. Script 03
+(`earthengine/exploration/03_s5p_no2_daily_composites.js`) explores a
+**provisional** calendar-day compositing of the raw collection; the final
+daily compositing method remains an open owner decision (see
 [docs/roadmap.md](docs/roadmap.md)). No current feature detects episodes.
 
 ## Repository layout

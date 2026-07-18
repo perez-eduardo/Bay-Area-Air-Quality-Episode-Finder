@@ -166,6 +166,24 @@ visible and explainable in the app:
   matching the episode definition, so the project can be demonstrated on known
   or interesting periods.
 
+## Contextual overlays (optional, later)
+
+A possible later feature is a set of optional map overlays that give
+geographic context when interpreting NO₂ patterns: major highways and
+transportation corridors; industrial and permitted-facility locations;
+land-use categories such as residential, commercial, and industrial; ports
+and airports; and possibly population density and meteorological context
+such as wind.
+
+These overlays would provide **geographic context only**. Spatial
+coincidence must not be presented as proof that a road, facility, or
+land-use category caused an observed NO₂ pattern. Sentinel-5P's resolution
+also does not support attributing column values to individual road segments
+or facilities without additional evidence. No overlay datasets or providers
+have been selected and nothing is implemented; any future adoption would go
+through the data-source evaluation checklist in
+[data-sources.md](data-sources.md).
+
 ## Language and claims policy
 
 The app and documentation must use careful language, for example: *possible

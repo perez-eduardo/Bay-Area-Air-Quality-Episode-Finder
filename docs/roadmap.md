@@ -26,19 +26,24 @@ Decided:
       fixed-scale and relative period-stretched views
       (`earthengine/exploration/02_s5p_no2_display_modes.js`); purpose and
       limitations of both modes documented in `earthengine/README.md`
+- [x] Third exploration script — raw temporal structure and provisional
+      calendar-day composites
+      (`earthengine/exploration/03_s5p_no2_daily_composites.js`): counts
+      source images per calendar date, builds one provisional
+      (arithmetic-mean) daily composite per date with source images
+      preserving `system:time_start`, compares the raw image-level chart
+      with the provisional daily chart, and reports calendar-day coverage —
+      distinguishing days that merely have source images from days with a
+      valid (non-null) daily regional mean. The daily compositing method
+      remains provisional — **not** decided.
 
 Still open:
 
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
-- [ ] **Next analytical milestone** — daily temporal standardization
-      (`earthengine/exploration/03_s5p_no2_daily_composites.js`): inspect
-      the raw temporal structure of the Sentinel-5P collection; count source
-      images by calendar date; create one provisional calendar-day composite
-      per usable date, preserving `system:time_start`; compare the raw
-      image-level chart with a daily chart; report the number of calendar
-      days with usable data; evaluate the consequences of the provisional
-      compositing method (see [methodology.md](methodology.md))
+- [ ] Owner evaluation of the provisional daily-compositing exploration
+      (script 03): decide the temporal unit and the final daily compositing
+      method (open decisions listed in [methodology.md](methodology.md))
 
 ## Phase 1 — Basic Earth Engine app structure
 
@@ -91,3 +96,14 @@ have been evaluated (see the script 03 milestone in Phase 0 and
   monitor comparison; framed as an estimate, never as direct observation)
 - Explainable ML for episode-day classification, with error reporting —
   only after the explainable non-ML workflow is credible on its own
+- Optional contextual map overlays for later interpretation (geographic
+  context only): major highways and transportation corridors; industrial
+  and permitted-facility locations; land-use categories such as
+  residential, commercial, and industrial; ports and airports; possibly
+  population density and meteorological context such as wind. Spatial
+  coincidence must not be presented as proof that a road, facility, or
+  land-use category caused an observed NO₂ pattern, and Sentinel-5P
+  resolution does not support attributing values to individual road
+  segments or facilities without additional evidence. No overlay datasets
+  or providers selected; not implemented (see
+  [methodology.md](methodology.md))
