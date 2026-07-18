@@ -1,20 +1,45 @@
-# Data sources (candidates only — nothing final)
+# Data sources
 
-**No dataset in this document is final.** These are candidates consistent with
-the project overview (satellite NO₂ signal, reanalysis support, ground-monitor
-comparison). Each must be evaluated in the Earth Engine Data Catalog (coverage,
-resolution, latency, quality flags) before being adopted, and that evaluation
-is a TODO for the project owner.
+**Decision status:** the study-region boundary and the first satellite NO₂
+dataset are **decided** (owner decision, 2026-07-17) and recorded below.
+Everything else remains a candidate: no other dataset is final until it passes
+the evaluation checklist at the bottom and is approved by the project owner.
 
-## Candidate categories
+## Decided
 
-### Satellite NO₂ signal
+### Satellite NO₂ signal — decided
 
-- Example candidate to evaluate: Sentinel-5P TROPOMI NO₂. **Not selected** —
-  like every dataset here, it must pass the evaluation checklist below and be
-  approved by the project owner before adoption.
-- TODO: evaluate product/level choice, quality filtering, temporal coverage,
-  and suitability for Bay Area spatial scale.
+- **Decided (2026-07-17):** Sentinel-5P TROPOMI **OFFL** tropospheric NO₂ via
+  the Earth Engine dataset `COPERNICUS/S5P/OFFL/L3_NO2`, band
+  `tropospheric_NO2_column_number_density` (units: mol/m²).
+- Catalog notes: the L3 grid is ~1113 m; the catalog describes quality
+  filtering applied during L3 generation (TODO: record the exact filter
+  details when documenting limitations); OFFL NO₂ imagery is available from
+  late June 2018 onward.
+- TODO: record dataset-specific limitations in
+  [methodology.md](methodology.md) as exploration reveals them (column vs.
+  ground-level, cloud/retrieval coverage gaps, seasonal coverage differences).
+
+### Region boundary — decided and ingested
+
+- **Decided (2026-07-17):** the study region is the official **BAAQMD
+  jurisdiction** — all of Alameda, Contra Costa, Marin, Napa, San Francisco,
+  San Mateo, and Santa Clara counties plus the southern portions of Solano and
+  Sonoma counties.
+- **Earth Engine asset (ingested):**
+  `projects/thematic-carver-502603-k5/assets/ca_air_district_boundaries` — a
+  California air-district boundaries table. Scripts select the district with
+  the filter `Air_Distri == "BAY AREA AQMD"` and dissolve the result into a
+  single feature so the map shows one clean outer boundary.
+  - TODO: record the boundary layer's original download source here
+    (publisher page/URL, version, retrieval date).
+- **Fallback only:** the TIGER/2018 county approximation (the seven full
+  counties plus *all* of Solano and Sonoma) remains in the exploration script
+  solely as a clearly labeled fallback for when the asset is unavailable
+  (e.g., an account without read access). It is not used in normal operation
+  and overstates the jurisdiction's northern extent.
+
+## Candidate categories (still open)
 
 ### Reanalysis / model support
 
@@ -30,11 +55,6 @@ is a TODO for the project owner.
 - TODO: decide whether and how monitor data is accessed (export, API, manual
   download for the R notebook), and which role it plays (validation only vs.
   displayed evidence).
-
-### Region boundary
-
-- TODO: decide the Bay Area region definition (9-county, BAAQMD jurisdiction,
-  or bounding box) and the boundary dataset used to draw it.
 
 ## Evaluation checklist (apply to every candidate before adoption)
 

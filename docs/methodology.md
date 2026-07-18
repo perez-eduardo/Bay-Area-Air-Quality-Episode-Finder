@@ -73,7 +73,7 @@ visible and explainable in the app:
 | Evidence-agreement rules across sources | TODO — not decided |
 | Episode sensitivity control (user-adjustable?) | TODO — not decided |
 | Validation approach (comparison against known historical events / monitors) | TODO — not decided |
-| Exact Bay Area region definition | TODO — not decided |
+| Exact Bay Area region definition | **Decided** — official BAAQMD jurisdiction (see [data-sources.md](data-sources.md)) |
 
 ## Analysis modes
 

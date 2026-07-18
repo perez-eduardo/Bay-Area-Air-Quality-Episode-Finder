@@ -12,12 +12,21 @@ Decided:
 - [x] Repository structure and planning docs (this phase)
 - [x] Earth Engine app form: JavaScript API, developed and published through
       the Earth Engine Code Editor
+- [x] Study region: official BAAQMD jurisdiction (boundary source and interim
+      county approximation recorded in [data-sources.md](data-sources.md))
+- [x] First dataset: Sentinel-5P OFFL tropospheric NO₂
+      (`COPERNICUS/S5P/OFFL/L3_NO2`)
+- [x] Initial data-exploration script
+      (`earthengine/exploration/01_s5p_no2_exploration.js`)
+- [x] Official BAAQMD boundary ingested as an Earth Engine asset
+      (`projects/thematic-carver-502603-k5/assets/ca_air_district_boundaries`,
+      filter `Air_Distri == "BAY AREA AQMD"`) and used by the exploration
+      script; the county approximation remains only as a fallback
 
-Still open (owner decisions):
+Still open:
 
-- [ ] Decide Bay Area region definition (TODO)
-- [ ] Evaluate and approve a first dataset for the NO₂ signal (TODO — all
-      datasets are candidates until then, see [data-sources.md](data-sources.md))
+- [ ] Record the boundary layer's original download source (publisher, URL,
+      version, retrieval date) in [data-sources.md](data-sources.md)
 
 ## Phase 1 — Basic Earth Engine app structure
 

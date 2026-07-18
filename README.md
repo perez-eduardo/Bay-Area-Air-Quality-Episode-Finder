@@ -37,7 +37,7 @@ documents its assumptions and uncertainty.
 
 | Feature | Status |
 | --- | --- |
-| Bay Area map with air-quality-related layers | Planned |
+| Bay Area map with air-quality-related layers | Exploration started (see `earthengine/`) |
 | Time-series charts vs. a baseline | Planned |
 | Evidence panel (persistence, spatial extent, source agreement) | Planned |
 | Episode detection (scan for candidate episode periods) | Planned |
@@ -54,7 +54,7 @@ documents its assumptions and uncertainty.
 │   ├── data-sources.md     # Candidate data sources (none final yet)
 │   ├── architecture.md     # Planned components and hosting
 │   └── roadmap.md          # Phased development plan
-├── earthengine/            # Google Earth Engine app (not started)
+├── earthengine/            # Earth Engine scripts (exploration started; app not built)
 ├── analysis/               # R analysis / validation notebooks (not started)
 └── landing-page/           # Custom-domain landing page (not started)
 ```
@@ -71,10 +71,16 @@ documents its assumptions and uncertainty.
 
 ## Geographic focus
 
-The San Francisco Bay Area.
+The San Francisco Bay Area, defined as the official jurisdiction of the Bay
+Area Air Quality Management District (BAAQMD): all of Alameda, Contra Costa,
+Marin, Napa, San Francisco, San Mateo, and Santa Clara counties plus the
+southern portions of Solano and Sonoma counties.
 
-- TODO: decide the exact region definition (e.g., 9-county Bay Area, BAAQMD
-  jurisdiction, or a bounding box) before implementation.
+The boundary comes from an uploaded Earth Engine asset of California
+air-district boundaries, filtered to the Bay Area district (asset ID, field,
+and filter value in [docs/data-sources.md](docs/data-sources.md)). A
+county-based approximation remains in the exploration script only as a
+clearly labeled fallback for when that asset is unavailable.
 
 ## License
 

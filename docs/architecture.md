@@ -11,13 +11,18 @@ Planned components and how they fit together. Nothing here is implemented yet.
 - R is the supporting analysis/validation layer; Python may be used later for
   supporting analysis or notebooks. Neither is the app runtime.
 - Hosting: Google Earth Engine App, Railway landing page, AWS Route 53 DNS.
-- Geographic focus: San Francisco Bay Area (exact boundary still open, below).
+- Study region: the official BAAQMD jurisdiction, from the ingested Earth
+  Engine asset
+  `projects/thematic-carver-502603-k5/assets/ca_air_district_boundaries`
+  filtered to `Air_Distri == "BAY AREA AQMD"` (details and a provenance TODO
+  in [data-sources.md](data-sources.md)).
+- First dataset: Sentinel-5P OFFL tropospheric NO₂
+  (`COPERNICUS/S5P/OFFL/L3_NO2`).
 
 **Still open** (owner decisions, marked TODO here and in the other docs):
 
-- Exact Bay Area region definition
-- All datasets — candidates only until evaluated and approved
-  (see [data-sources.md](data-sources.md))
+- Remaining datasets (reanalysis, ground monitors) — candidates only until
+  evaluated and approved (see [data-sources.md](data-sources.md))
 - Landing-page stack; domain/subdomain; Earth Engine app publish settings
 - All methodological criteria (see [methodology.md](methodology.md))
 
