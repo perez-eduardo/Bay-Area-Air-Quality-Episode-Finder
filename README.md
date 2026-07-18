@@ -8,10 +8,13 @@ reasoning behind any interpretation of them. **Episode detection** — scanning 
 data for periods that look unusually poor, persistent, and widespread — is one
 planned feature of the dashboard, not the only one.
 
-> **Status: planning / early data exploration.**
-> The dashboard app is not built yet. This repository holds the project
-> concept, methodology notes, planned structure, and the first Earth Engine
-> data-exploration scripts (see `earthengine/`).
+> **Status: early data exploration and method validation.**
+> The dashboard app is not built yet. Four Earth Engine exploration
+> scripts exist (see `earthengine/`), the calendar-day method for the
+> Sentinel-5P NO₂ evidence source is still **under evaluation**, and a
+> research-and-validation gate in [docs/roadmap.md](docs/roadmap.md) now
+> precedes any baseline, anomaly, or episode work. No current feature
+> detects episodes.
 
 ## What this project is
 
@@ -41,19 +44,28 @@ documents its assumptions and uncertainty.
 | Bay Area map with air-quality-related layers | Exploration started (see `earthengine/`) |
 | Time-series charts vs. a baseline | Planned |
 | Evidence panel (persistence, spatial extent, source agreement) | Planned |
-| Episode detection (scan for candidate episode periods) | Planned |
+| Episode detection (scan for candidate episode periods) | Planned — paused pending the validation gate (see roadmap) |
 | Methodology / "under the hood" section in the app | Planned |
 | R-based validation notebook | Planned (later phase) |
 | PM2.5 estimation, machine learning | Optional (much later; see roadmap) |
 
-The exploration scripts' current charts are **exploratory image-level
-series**: each chart point is one raw Sentinel-5P collection image, and
-several collection images can share the same calendar date. They are not the
-final daily time series that episode analysis will use. Script 03
-(`earthengine/exploration/03_s5p_no2_daily_composites.js`) explores a
-**provisional** calendar-day compositing of the raw collection; the final
-daily compositing method remains an open owner decision (see
-[docs/roadmap.md](docs/roadmap.md)). No current feature detects episodes.
+Sentinel-5P NO₂ is used as a **tropospheric-column evidence source** — a
+satellite indicator of column patterns, never ground-level concentration,
+AQI, health risk, or per-road/per-facility attribution. The exploration
+scripts' charts are exploratory: scripts 01–02 plot one point per raw
+Earth Engine collection member (an **orbit-product asset**; many can
+intersect the region's footprint on one day without contributing valid
+data), and scripts 03–04 explore **provisional** calendar-day methods that
+are still under evaluation. The initial Sentinel-5P analytical feature
+carries the cautious working description **"Satellite NO₂ Column Anomaly
+Explorer"**; the broader "candidate air-quality episode" label will
+require corroborating evidence later (ground monitors, persistence,
+coverage, meteorological context), and neither the repository nor the
+final product is renamed without an explicit owner decision. Before any
+baseline or anomaly work, the project must pass the preprocessing and
+validation gate in [docs/roadmap.md](docs/roadmap.md) (details in
+[docs/methodology.md](docs/methodology.md)). No current feature detects
+episodes.
 
 ## Repository layout
 

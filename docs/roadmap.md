@@ -36,14 +36,24 @@ Decided:
       distinguishing days that merely have source images from days with a
       valid (non-null) daily regional mean. The daily compositing method
       remains provisional — **not** decided.
+- [x] Fourth exploration script — product-aware daily method exploration
+      (`earthengine/exploration/04_s5p_no2_product_daily_method.js`) with
+      local-date filtering (America/Los_Angeles) and product-metadata
+      reporting. Its live test **disproved** the multiple-tiles-per-product
+      premise for the Bay Area test period (one Earth Engine asset per
+      product/orbit; ~14–15 footprint-intersecting orbit-product assets
+      per local day) and motivated the research-and-validation gate below.
+      The script remains exploratory and under evaluation — no daily
+      method is decided.
 
 Still open:
 
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
-- [ ] Owner evaluation of the provisional daily-compositing exploration
-      (script 03): decide the temporal unit and the final daily compositing
-      method (open decisions listed in [methodology.md](methodology.md))
+- [ ] Work through the research-and-validation gate below — the temporal
+      unit, daily contributor rule, combination rule, scale, and coverage
+      handling are all decided there (open decisions listed in
+      [methodology.md](methodology.md))
 
 ## Phase 1 — Basic Earth Engine app structure
 
@@ -57,11 +67,34 @@ Matches the overview's "initial build direction": structure before modeling.
 - [ ] Methodology and limitations notes visible in the app
 - [ ] Links to GitHub and documentation
 
+## Research and validation gate (before any baseline or anomaly work)
+
+Added 2026-07-18 after the exploration 04 live test. This gate must be
+completed, in order, before Phase 2 begins. Each step ends with something
+reviewable; no threshold or method is adopted in advance (details in
+[methodology.md](methodology.md)).
+
+1. Correct script 04 terminology and identify products with actual valid
+   BAAQMD contribution.
+2. Audit processing status, product quality, processor versions, algorithm
+   versions, and spatial resolution.
+3. Implement and test area-weighted regional means and valid-area
+   fractions.
+4. Run scale sensitivity at candidate equal-area analysis scales.
+5. Run coverage-threshold sensitivity without adopting a threshold.
+6. Determine the final daily contributor and combination rule.
+7. Build a small R validation workflow using surface monitors and
+   meteorological context.
+8. Decide whether the Earth Engine historical record is sufficiently
+   homogeneous.
+9. Only then define a baseline and anomaly method.
+10. Only after corroboration rules are established may the project
+    classify a result as a candidate air-quality episode.
+
 ## Phase 2 — Baseline and anomaly views
 
-Begins only after the temporal unit and the final daily compositing approach
-have been evaluated (see the script 03 milestone in Phase 0 and
-[methodology.md](methodology.md)).
+**Paused, not abandoned.** Begins only after the research and validation
+gate above is complete (see [methodology.md](methodology.md)).
 
 - [ ] Baseline definition decided and documented in
       [methodology.md](methodology.md)
@@ -79,6 +112,10 @@ have been evaluated (see the script 03 milestone in Phase 0 and
 - [ ] Current/recent screening mode
 
 ## Phase 4 — R validation layer
+
+A small R validation workflow (surface monitors plus meteorological
+context) is pulled forward into the research-and-validation gate (step 7);
+this fuller phase remains for the reproduction and methodology work below.
 
 - [ ] R notebook reproducing baseline and detection logic on exported data
 - [ ] Comparison against ground-monitor data (access method TODO)

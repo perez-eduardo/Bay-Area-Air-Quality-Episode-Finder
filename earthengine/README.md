@@ -34,6 +34,16 @@ developed and run through the Earth Engine Code Editor.
   method used is provisional — **not** the final approved method.
   **Exploration only** — no baselines, anomalies, episode detection,
   thresholds, scoring, or modeling.
+- `exploration/04_s5p_no2_product_daily_method.js` — fourth
+  data-exploration script: filters by Bay Area local calendar dates
+  (America/Los_Angeles), groups collection members by `PRODUCT_ID`,
+  reports product/orbit metadata, and compares a product-aware daily
+  series against the script-03-style raw daily mean (see
+  [Collection model and exploration 04](#collection-model-and-exploration-04)
+  below). Its live test **disproved** its original
+  multiple-tiles-per-product premise; the script remains exploratory and
+  under evaluation. **Exploration only** — no baselines, anomalies,
+  episode detection, thresholds, scoring, or modeling.
 
 ## Running a script in the Code Editor
 
@@ -44,8 +54,8 @@ developed and run through the Earth Engine Code Editor.
    and the mean NO₂ layer; a side panel shows explanatory text, date
    controls, a data-availability note, and the time-series chart. Script 02
    additionally shows a display-mode selector and a mode-specific legend;
-   script 03 shows a layer selector, a temporal-coverage summary, and two
-   charts.
+   scripts 03 and 04 show layer selectors, coverage summaries, and
+   comparison charts.
 4. Change the date range in the panel's date boxes and click **Update** — or
    edit the `CONFIG` block at the top of the script and re-run.
 
@@ -68,12 +78,18 @@ and adds a note to the side panel. See
 ## Temporal behavior of scripts 01 and 02 (image-level, exploratory)
 
 Both scripts work directly on the raw `COPERNICUS/S5P/OFFL/L3_NO2`
-collection. A raw collection image is **not one daily observation**: several
-collection images can carry the same calendar date, and more than one of
-them may intersect the BAAQMD region on that date. Consequences:
+collection, whose members are **orbit-product assets** — one Level-3 grid
+per Sentinel-5P product/orbit (see the corrected collection model in
+[docs/data-sources.md](../docs/data-sources.md)). A collection member is
+**not one daily observation**: several orbit-product assets can carry the
+same calendar date, many intersect the BAAQMD region's footprint without
+contributing valid NO₂ pixels over it, and the exploration 04 live test
+found roughly 14–15 footprint-intersecting assets per local day.
+Consequences:
 
-- The "N images" count in the status line counts raw collection images. It
-  is **not** a count of days or of independent daily observations.
+- The "N images" count in the status line counts raw collection members.
+  It is **not** a count of days, of independent daily observations, or of
+  valid regional contributors.
 - The time-series chart plots one point per raw collection image. It is an
   exploratory **image-level** series, not the final daily time series that
   episode analysis will use. The final calendar-day compositing method is an
@@ -88,11 +104,18 @@ them may intersect the BAAQMD region on that date. Consequences:
   will use an explicit, stable, documented scale without `bestEffort` (see
   [docs/methodology.md](../docs/methodology.md)).
 
-Dataset details — including the catalog's Level-3 ingestion description
-(filtering source data, merging it into mosaics, and producing raster tiles)
-and the ingestion validity filter
-`tropospheric_NO2_column_number_density_validity > 50` for the selected
-band — are recorded in [docs/data-sources.md](../docs/data-sources.md).
+Dataset details — including the corrected collection model (one Level-3
+grid per Sentinel-5P orbit/product; see
+[Collection model and exploration 04](#collection-model-and-exploration-04)
+below) and the catalog's quality-filtering wording — are recorded in
+[docs/data-sources.md](../docs/data-sources.md). On quality filtering: the
+current catalog page **states** a 75 % validity ingestion rule for the
+tropospheric NO₂ band while the example command on the same page still
+shows `tropospheric_NO2_column_number_density_validity > 50` (an
+inconsistency on the official page), and the official Sentinel-5P NO₂
+Product User Manual recommends `qa_value > 0.75` for most users. We have
+not independently verified which rule Google's ingestion implementation
+actually applies.
 
 ## Display modes (exploration 02)
 
@@ -201,14 +224,46 @@ of calendar days with a valid daily regional mean; and the min/median/max
 number of source images per source-image day. A raw collection image is
 never described as a daily observation.
 
+## Collection model and exploration 04
+
+`exploration/04_s5p_no2_product_daily_method.js` was written to test the
+hypothesis that normal Bay Area collection members are multiple tiles of
+one daily product. **The live test rejected that hypothesis.** Observed
+(default period, local dates 2023-01-01 to 2023-04-01 — one region and
+period, not proof of global collection behavior): 1,276 raw Earth Engine
+assets containing 1,276 distinct `PRODUCT_ID` values and 1,276 distinct
+`ORBIT` values — one returned asset per product/orbit — with roughly
+14–15 orbit-product assets assigned to each local calendar day.
+
+Consequences (full corrected collection model in
+[docs/data-sources.md](../docs/data-sources.md)):
+
+- A normal Bay Area collection member is an **orbit-product asset** (a
+  single-orbit Level-3 asset) — not, in general, a tile. The official
+  exception: an antimeridian-spanning product may appear as two Earth
+  Engine assets, so grouping by `PRODUCT_ID` remains a defensive
+  reconstruction step (a no-op in the Bay Area test).
+- `filterBounds(BAAQMD)` only means an asset's geometry or footprint
+  intersects the study region — it does **not** prove the asset contains
+  unmasked, valid NO₂ retrievals over BAAQMD. The meaningful daily
+  contributor count is the number of orbit products with **valid pixels
+  over BAAQMD**, not the number of collection members assigned to a date.
+- Script 04's in-code "tile" terminology (`tile_count`,
+  region-intersecting tile counts) predates the live test; correcting it
+  is step 1 of the research-and-validation gate in
+  [docs/roadmap.md](../docs/roadmap.md). The script remains useful for
+  auditing product metadata and valid regional contribution, and remains
+  **exploratory — no daily method is decided**.
+
 ## Next milestone
 
-Script 03 exists and remains exploratory. The next analytical step is the
-owner's evaluation of the provisional daily-compositing results and the
-temporal-unit decisions listed in
-[docs/methodology.md](../docs/methodology.md) — the daily compositing
-method is **not** decided. Historical baseline and anomaly development
-begins only after those decisions are made.
+The next approved test is step 1 of the research-and-validation gate in
+[docs/roadmap.md](../docs/roadmap.md): correct script 04's terminology and
+identify the products with **actual valid BAAQMD contribution** (valid
+pixels, valid area, valid-area fraction per product), followed by the
+product-metadata audit (processing status, product quality, processor and
+algorithm versions, spatial resolution). No baseline, anomaly, or episode
+work is approved before the gate completes.
 
 The Phase 1 app structure in [docs/roadmap.md](../docs/roadmap.md) — map,
 indicator selector, time series, placeholder episode summary, and visible

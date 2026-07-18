@@ -93,6 +93,23 @@ TODO: choose the stack (static HTML vs. a small framework). Keep it minimal.
 
 TODO: domain/subdomain choice; publish settings for the Earth Engine app.
 
+## Earth Engine's role vs. external rigorous analysis
+
+The Earth Engine Level-3 collection (interactive, in the app and Code
+Editor) is suitable for: exploration; broad maps; temporal summaries;
+preliminary anomaly detection; and a public interactive evidence layer.
+
+A more rigorous retrieval-level workflow may eventually require official
+Level-2 or RPRO files processed **outside** Earth Engine (in the
+supporting analysis layer — R first, possibly Python later), because the
+Level-3 collection may not expose all retrieval diagnostics (original
+`qa_value`, per-retrieval precision, averaging kernels, air-mass factors,
+cloud/a-priori detail — to be audited against the current catalog before
+any field is declared absent; see [data-sources.md](data-sources.md)).
+External Level-2 ingestion is **not** an immediate implementation
+commitment — it is a recorded possibility, contingent on the audits in
+[methodology.md](methodology.md).
+
 ## Performance and precomputation (planned)
 
 Planned scalability posture. Precomputation is a **planned option**, not a
@@ -103,7 +120,11 @@ decision to implement immediately:
   and automatic episode scans may become too expensive for repeated
   interactive computation.
 - Reusable expensive results may later be produced through Earth Engine
-  **batch exports** and stored as **Earth Engine assets**.
+  **batch exports** and stored as **Earth Engine assets** — including
+  possible future precomputed, quality-controlled daily assets (daily
+  regional values with valid-area fractions and product traceability),
+  once the preprocessing plan in [methodology.md](methodology.md) has been
+  evaluated.
 - A public Earth Engine App should consume lightweight, reusable products
   when needed to remain responsive.
 - The official BAAQMD boundary asset must be readable by the published Earth
