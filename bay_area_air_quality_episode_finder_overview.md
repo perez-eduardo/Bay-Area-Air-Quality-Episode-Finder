@@ -217,11 +217,11 @@ The app or landing page should include links to:
 
 ## Role of Google Earth Engine
 
-Google Earth Engine is the main platform for geospatial analysis and app visualization.
+Google Earth Engine is the geospatial processing engine of the project.
 
-The project should use Earth Engine to work with satellite, reanalysis, or related environmental datasets and to build the public-facing app.
+The project should use Earth Engine to work with satellite, reanalysis, or related environmental datasets: ImageCollection filtering, daily compositing, spatial reductions, baseline/anomaly image generation, and other geospatial computation.
 
-The Earth Engine app can be published and linked from a custom-domain landing page.
+Architecture update (owner decision, 2026-07-18): the public application is hosted entirely on Railway — a Railway-hosted frontend and a Railway backend/API that calls Earth Engine. The original idea of publishing the app as a separate Earth Engine App linked from a landing page is no longer the planned final architecture and remains only a possible fallback (see docs/architecture.md).
 
 ## Role of R
 
@@ -257,18 +257,22 @@ The app should avoid black-box claims.
 
 The app should be easy for an interviewer to access.
 
-The planned hosting approach is:
+The decided hosting approach (owner decision, 2026-07-18) is:
 
-- Google Earth Engine App for the interactive geospatial app
-- Railway for a simple custom-domain landing page
+- Railway hosts the complete public application: a Railway-hosted frontend and a Railway backend/API
+- The Railway backend calls Google Earth Engine, which remains the geospatial processing engine and returns statistics, map layers/tiles, and geospatial results
+- The backend authenticates to Earth Engine, so public users do not need their own Earth Engine accounts
 - AWS Route 53 for DNS because the user’s domain is managed there
 
-The landing page can provide:
+Migration to this architecture is not implemented, and the technology choices — frontend framework, backend runtime, map library, Earth Engine authentication design, caching design, any database — remain open owner decisions (see docs/architecture.md).
+
+The previous plan — a Google Earth Engine App linked from a simple Railway landing page — is no longer the planned final architecture and remains only a possible fallback.
+
+The public application can provide:
 
 - project title
 - short explanation
-- screenshot
-- live app link
+- the interactive map, charts, and evidence panels
 - GitHub link
 - methodology/notebook links
 
