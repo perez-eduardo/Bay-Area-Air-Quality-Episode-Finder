@@ -1,0 +1,1875 @@
+---
+title: "Sentinel-5P OFFL NO2 — historical-record homogeneity audit (BAAQMD)"
+subtitle: >
+  Bay Area Air Quality Episode Finder — supporting analysis.
+  Audit and retrospective baseline-robustness study. The notebook's
+  computations select nothing; the project owner's recorded decision
+  (2026-07-19) is in Section 8.
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = TRUE,
+  fig.width = 9,
+  fig.height = 4.5
+)
+```
+
+# Purpose and scope
+
+This notebook analyses the yearly audit tables exported by
+`earthengine/exploration/07_s5p_no2_historical_homogeneity_export.js`
+to support the **historical-record homogeneity decision** for the
+Sentinel-5P OFFL tropospheric NO2 record over the BAAQMD jurisdiction
+(gate step 8 in `docs/roadmap.md`; audit background in
+`docs/methodology.md`).
+
+Every value analysed here is a Sentinel-5P **tropospheric vertical NO2
+column** quantity (mol/m²) — an indicator of column patterns. It is not
+a ground-level concentration, not an AQI value, not a health measure,
+and not an episode result.
+
+The notebook also contains a **retrospective baseline-robustness
+study** (Section 7): under the project owner's policy-level adoption of
+Outcome B (the Earth Engine OFFL record is usable for exploratory
+historical analysis but must not be treated as unconditionally
+homogeneous), it evaluates practical historical-pool variants of the
+accepted exploratory script 06 baseline across all eligible target
+months from 2020 onward. That study informed the owner's final
+decision and baseline policy, recorded in Section 8 (2026-07-19).
+
+**What this notebook does NOT do:**
+
+- It does **not** choose the homogeneity outcome or the baseline
+  policy. Both are **project owner decisions**, recorded 2026-07-19
+  after review of the accepted full-history report: Outcome B with an
+  explicit baseline policy (Section 8 and `docs/methodology.md`).
+- It does **not** select a baseline restriction, historical-pool
+  variant, or coverage threshold by computation. Section 7 reports
+  robustness evidence only; its coverage values were sensitivity
+  candidates (the owner's recorded policy adopts **no hard
+  valid-area-fraction exclusion**).
+- It does **not** calculate processor correction factors.
+- It does **not** treat temporal discontinuities as proof of
+  retrieval-processing effects — season, meteorology, emission trends
+  (including the 2020 pandemic period), and coverage changes are
+  plausible confounders throughout.
+- It does **not** define final thresholds, baselines, persistence
+  rules, spatial-extent rules, or episode labels.
+
+**Data source:** local CSV files exported by script 07 (Google Drive
+downloads placed in the configured directories below). This notebook
+does **not** download data automatically.
+
+# Packages
+
+Deliberately modest, ordinary packages for reproducible analysis:
+
+```{r packages}
+# readr    - CSV import with explicit column types
+# dplyr    - data manipulation
+# tidyr    - reshaping (pivots, completing date grids)
+# purrr    - functional iteration over files / variants
+# stringr  - set-string parsing (';'-joined export cells)
+# ggplot2  - figures
+# lubridate- calendar arithmetic (months, years, seasons)
+# scales   - axis formatting
+# knitr    - tables (kable)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(knitr)
+```
+
+# Configuration
+
+```{r config}
+# All data paths are anchored to the repository root so knitting does
+# not depend on the working directory (RStudio knit button,
+# rmarkdown::render() from the repo root, or knitr::knit() elsewhere).
+# During a knit the search starts from this file's own directory; in
+# interactive use it starts from the working directory.
+find_repo_root <- function(start) {
+  markers <- c("bay_area_air_quality_episode_finder_overview.md", ".git")
+  current <- normalizePath(start, winslash = "/", mustWork = TRUE)
+  repeat {
+    if (any(file.exists(file.path(current, markers)))) return(current)
+    parent <- dirname(current)
+    if (identical(parent, current)) {
+      stop("Repository root not found above '", start, "' (looked for: ",
+           paste(markers, collapse = ", "),
+           "). Knit or run this notebook from inside the repository.")
+    }
+    current <- parent
+  }
+}
+knit_input <- tryCatch(knitr::current_input(dir = TRUE),
+                       error = function(e) NULL)
+repo_root <- find_repo_root(
+  if (!is.null(knit_input)) dirname(knit_input) else getwd())
+
+config <- list(
+  # Local directories holding the script 07 exports (no auto-download),
+  # anchored to the repository root.
+  daily_dir     = file.path(repo_root, "data", "homogeneity"),
+  products_dir  = file.path(repo_root, "data", "homogeneity"),
+  manifest_path = file.path(repo_root, "data", "homogeneity",
+                            "s5p_no2_homogeneity_manifest.csv"),
+
+  # Export-file conventions (must match script 07 CONFIG).
+  daily_pattern    = "^s5p_no2_homogeneity_daily_\\d{4}\\.csv$",
+  products_pattern = "^s5p_no2_homogeneity_products_\\d{4}\\.csv$",
+  set_separator    = ";",
+  missing_token    = "(missing)",
+
+  # Diagnostic display conventions ONLY - none of these is a decided
+  # scientific threshold or method:
+  transition_window_days = 60,  # +/- days shown around a metadata change
+  historical_years_diagnostic = 3,  # mirrors the script 06 exploratory
+                                    # baseline default (1-5, default 3)
+  small_sample_flag_n = 10,     # display flag for small baseline samples
+
+  # Retrospective baseline-robustness study (Section 7).
+  # First target year of the retrospective evaluation (owner-directed).
+  retrospective_start_year = 2020,
+  # Coverage-sensitivity CANDIDATES for the prior-three-years baseline
+  # (0 = any valid coverage). Sensitivity candidates only - none is an
+  # adopted threshold.
+  coverage_candidates = c(0, 0.20, 0.40, 0.60)
+)
+
+# Expected schemas (fixed column order set by script 07 `selectors`).
+expected_daily_cols <- c(
+  "local_date", "regional_mean_no2", "valid_area_fraction",
+  "has_valid_value", "daily_source_asset_count",
+  "daily_distinct_product_count", "daily_distinct_orbit_count",
+  "valid_contributor_count", "has_contributing_non_nominal",
+  "contributing_product_quality_values",
+  "contributing_processor_version_set",
+  "contributing_algorithm_version_set",
+  "contributing_processing_status_set",
+  "contributing_spatial_resolution_set",
+  "contributing_product_ids", "contributing_orbits"
+)
+expected_product_cols <- c(
+  "local_date", "system_time_start", "PRODUCT_ID", "ORBIT",
+  "PROCESSOR_VERSION", "ALGORITHM_VERSION", "PRODUCT_QUALITY",
+  "PROCESSING_STATUS", "SPATIAL_RESOLUTION"
+)
+expected_manifest_cols <- c(
+  "export_year", "requested_start", "requested_end",
+  "latest_represented_local_date", "last_included_local_date",
+  "actual_collection_start", "actual_collection_end", "dataset_id",
+  "band", "boundary_asset", "boundary_filter", "timezone", "crs",
+  "scale_m", "daily_combination_rule", "export_created_at",
+  "script_identifier"
+)
+```
+
+```{r availability}
+daily_files <- sort(list.files(config$daily_dir,
+                               pattern = config$daily_pattern,
+                               full.names = TRUE))
+product_files <- sort(list.files(config$products_dir,
+                                 pattern = config$products_pattern,
+                                 full.names = TRUE))
+data_available <- length(daily_files) > 0 &&
+  length(product_files) > 0 &&
+  file.exists(config$manifest_path)
+
+if (!data_available) {
+  cat("Exported audit files were NOT found in the configured",
+      "directories.\n",
+      "Run script 07 in the Earth Engine Code Editor, start the export",
+      "tasks,\n",
+      "download the CSVs from Drive into the configured directories,",
+      "then re-knit.\n",
+      "Analysis chunks below are skipped (eval = FALSE) until then.\n")
+}
+```
+
+# Section 1 — Import and schema validation
+
+Import notes: an **empty** `regional_mean_no2` cell means the day had no
+valid area (read as `NA`; script 07 exports the row anyway — days are
+never silently omitted). In set-string cells, an **empty string** means
+"no values", which is distinct from the literal `` `r "(missing)"` ``
+token (a product present but lacking that metadata property). The daily
+`contributing_*` metadata columns are **contributor-scoped**: derived
+only from products with actual valid BAAQMD pixels, so a day with no
+valid contributors has empty contributor-scoped set strings **by
+design**. The product metadata table is the **collection-wide** record
+of every footprint-intersecting asset; the two are analysed separately
+throughout this notebook and never merged.
+
+```{r import, eval = data_available}
+check_schema <- function(df, expected, label) {
+  missing_cols <- setdiff(expected, names(df))
+  extra_cols   <- setdiff(names(df), expected)
+  if (length(missing_cols) > 0 || length(extra_cols) > 0) {
+    stop("Schema mismatch in ", label,
+         " - missing: [", paste(missing_cols, collapse = ", "),
+         "]; unexpected: [", paste(extra_cols, collapse = ", "), "]")
+  }
+  invisible(TRUE)
+}
+
+daily_col_types <- cols(
+  local_date = col_date(format = "%Y-%m-%d"),
+  regional_mean_no2 = col_double(),
+  valid_area_fraction = col_double(),
+  has_valid_value = col_integer(),
+  daily_source_asset_count = col_integer(),
+  daily_distinct_product_count = col_integer(),
+  daily_distinct_orbit_count = col_integer(),
+  valid_contributor_count = col_integer(),
+  has_contributing_non_nominal = col_integer(),
+  .default = col_character()
+)
+product_col_types <- cols(
+  local_date = col_date(format = "%Y-%m-%d"),
+  system_time_start = col_double(),
+  .default = col_character()
+)
+manifest_col_types <- cols(
+  export_year = col_integer(),
+  scale_m = col_double(),
+  .default = col_character()
+)
+
+daily <- map_dfr(daily_files, function(f) {
+  df <- read_csv(f, col_types = daily_col_types, na = c(""))
+  check_schema(df, expected_daily_cols, basename(f))
+  df$source_file <- basename(f)
+  df
+})
+# Empty set-strings arrive as NA under na = c(""); restore them as
+# empty strings so "no values" stays distinct from a missing column.
+set_cols <- c("contributing_product_quality_values",
+              "contributing_processor_version_set",
+              "contributing_algorithm_version_set",
+              "contributing_processing_status_set",
+              "contributing_spatial_resolution_set",
+              "contributing_product_ids", "contributing_orbits")
+daily <- daily %>%
+  mutate(across(all_of(set_cols), ~ replace_na(.x, "")))
+
+products <- map_dfr(product_files, function(f) {
+  df <- read_csv(f, col_types = product_col_types, na = c(""))
+  check_schema(df, expected_product_cols, basename(f))
+  df$source_file <- basename(f)
+  df
+})
+
+manifest <- read_csv(config$manifest_path,
+                     col_types = manifest_col_types, na = c(""))
+check_schema(manifest %>% select(-any_of("source_file")),
+             expected_manifest_cols, basename(config$manifest_path))
+
+kable(manifest, caption = "Audit manifest (one row per exported year).")
+```
+
+```{r import-consistency, eval = data_available}
+# Internal consistency: has_valid_value == 1 must coincide with a
+# non-missing regional mean. Mismatches are REPORTED, never dropped.
+consistency <- daily %>%
+  mutate(mean_is_na = is.na(regional_mean_no2)) %>%
+  count(has_valid_value, mean_is_na)
+kable(consistency,
+      caption = paste("has_valid_value vs missing regional mean",
+                      "(expected: 1 pairs with FALSE, 0 with TRUE)."))
+
+inconsistent_rows <- daily %>%
+  filter((has_valid_value == 1) == is.na(regional_mean_no2))
+if (nrow(inconsistent_rows) > 0) {
+  kable(inconsistent_rows %>%
+          select(local_date, regional_mean_no2, has_valid_value,
+                 valid_area_fraction, source_file),
+        caption = "INCONSISTENT rows (investigate before relying on them).")
+} else {
+  cat("No has_valid_value / regional-mean inconsistencies found.\n")
+}
+
+cat("Daily rows:", nrow(daily),
+    "| product-asset rows:", nrow(products),
+    "| years in manifest:", paste(manifest$export_year, collapse = ", "),
+    "\n")
+```
+
+# Section 2 — Duplicate-date and missing-year checks
+
+```{r duplicates, eval = data_available}
+# Duplicate local dates across the combined daily table (expected: none;
+# yearly windows are non-overlapping).
+dup_dates <- daily %>% count(local_date) %>% filter(n > 1)
+if (nrow(dup_dates) > 0) {
+  kable(dup_dates, caption = "DUPLICATE local dates (investigate).")
+} else {
+  cat("No duplicate local dates.\n")
+}
+
+# Duplicate PRODUCT_ID rows in the product table. Two rows in the SAME
+# file can be legitimate (the official antimeridian two-asset
+# exception); the same PRODUCT_ID in DIFFERENT yearly files suggests a
+# product whose assets straddled a local-year boundary and was split
+# between exports (script 07 documents this; nothing is deduplicated
+# silently here).
+dup_products <- products %>%
+  group_by(PRODUCT_ID) %>%
+  summarise(n_rows = n(),
+            n_files = n_distinct(source_file), .groups = "drop") %>%
+  filter(n_rows > 1)
+if (nrow(dup_products) > 0) {
+  kable(dup_products,
+        caption = paste("PRODUCT_ID values with multiple asset rows",
+                        "(same file: antimeridian exception;",
+                        "multiple files: year-boundary straddle)."))
+} else {
+  cat("Every PRODUCT_ID has exactly one asset row.\n")
+}
+
+# Missing years and missing dates against the manifest's requested
+# windows (requested_end is END-EXCLUSIVE).
+requested_days <- manifest %>%
+  mutate(start = as.Date(requested_start),
+         end_exclusive = as.Date(requested_end)) %>%
+  rowwise() %>%
+  reframe(local_date = seq.Date(start, end_exclusive - 1, by = "day"))
+missing_days <- requested_days %>% anti_join(daily, by = "local_date")
+extra_days <- daily %>% anti_join(requested_days, by = "local_date")
+cat("Requested days:", nrow(requested_days),
+    "| exported daily rows:", nrow(daily),
+    "| requested-but-absent:", nrow(missing_days),
+    "| exported-but-unrequested:", nrow(extra_days), "\n")
+if (nrow(missing_days) > 0) {
+  kable(head(missing_days, 30),
+        caption = "Requested dates ABSENT from the daily export (first 30).")
+}
+
+years_in_files <- sort(unique(year(daily$local_date)))
+missing_years <- setdiff(manifest$export_year, years_in_files)
+if (length(missing_years) > 0) {
+  cat("Manifest years with no daily rows:",
+      paste(missing_years, collapse = ", "), "\n")
+} else {
+  cat("Every manifest year is represented in the daily files.\n")
+}
+```
+
+# Section 3 — Metadata timelines and regimes
+
+Two deliberately **separate** concepts — never merged in this notebook:
+
+- **Collection-wide metadata timeline** (product metadata table): every
+  footprint-intersecting asset, whether or not it contributed valid
+  BAAQMD pixels. Descriptive context for the record as delivered by
+  Earth Engine.
+- **Scientific daily-regime timeline** (daily audit table): built ONLY
+  from the contributor-scoped `contributing_processor_version_set`
+  column, so daily scientific values are grouped by the metadata of the
+  products that actually produced them — never by non-contributing
+  footprint-intersecting products.
+
+**Regime convention (diagnostic only).** A day's *contributor
+signature* is its `contributing_processor_version_set` string. A
+**contributor processor regime** is a maximal run of consecutive
+with-contributor days sharing one signature; days without contributors
+carry no signature and neither break nor extend a regime. This is a
+descriptive grouping convention for this audit — not a decided
+scientific stratification.
+
+## Collection-wide metadata timeline (context only)
+
+```{r collection-timeline, eval = data_available, fig.height = 6}
+collection_spans <- products %>%
+  group_by(PROCESSOR_VERSION) %>%
+  summarise(n_asset_rows = n(),
+            first_date = min(local_date),
+            last_date = max(local_date), .groups = "drop") %>%
+  arrange(first_date)
+kable(collection_spans,
+      caption = paste("Collection-wide PROCESSOR_VERSION spans (ALL",
+                      "footprint-intersecting assets - context only;",
+                      "not the scientific daily regimes)."))
+
+timeline_long <- products %>%
+  select(local_date, PROCESSOR_VERSION, ALGORITHM_VERSION,
+         SPATIAL_RESOLUTION, PROCESSING_STATUS) %>%
+  pivot_longer(-local_date, names_to = "field", values_to = "value") %>%
+  distinct()
+ggplot(timeline_long, aes(x = local_date, y = value)) +
+  geom_point(size = 0.4, alpha = 0.5) +
+  facet_wrap(~ field, ncol = 1, scales = "free_y") +
+  labs(title = paste("Collection-wide metadata timeline (ALL",
+                     "footprint-intersecting assets)"),
+       subtitle = paste("Context only - includes non-contributing",
+                        "products. The scientific daily regimes below",
+                        "use contributor-scoped fields. Overlaps and",
+                        "gaps are not proof of processing effects."),
+       x = "Bay Area local date", y = NULL) +
+  theme_minimal(base_size = 10)
+```
+
+## Scientific daily-regime timeline (contributor-scoped)
+
+```{r contrib-regimes, eval = data_available}
+contrib_days <- daily %>%
+  filter(valid_contributor_count > 0) %>%
+  arrange(local_date)
+
+# Run-length regimes over the with-contributor day sequence.
+runs <- rle(contrib_days$contributing_processor_version_set)
+contrib_days$contrib_regime_id <-
+  rep(seq_along(runs$lengths), runs$lengths)
+
+contrib_regime_table <- contrib_days %>%
+  group_by(contrib_regime_id,
+           contrib_signature = contributing_processor_version_set) %>%
+  summarise(start_date = min(local_date),
+            end_date = max(local_date),
+            n_contributor_days = n(), .groups = "drop") %>%
+  arrange(start_date) %>%
+  mutate(regime_label = paste0("R", contrib_regime_id, ": ",
+                               contrib_signature),
+         is_mixed_signature =
+           str_detect(contrib_signature,
+                      fixed(config$set_separator)))
+kable(contrib_regime_table,
+      caption = paste("Contributor-scoped processor regimes (runs of",
+                      "consecutive with-contributor days sharing one",
+                      "contributing_processor_version_set signature;",
+                      "diagnostic convention only)."))
+
+# Attach the contributor regime to the daily table (NA for days with no
+# valid contributors).
+daily <- daily %>%
+  left_join(contrib_days %>%
+              select(local_date, contrib_regime_id),
+            by = "local_date") %>%
+  left_join(contrib_regime_table %>%
+              select(contrib_regime_id, regime_label),
+            by = "contrib_regime_id")
+```
+
+```{r full-series, eval = data_available}
+ggplot(daily, aes(x = local_date, y = regional_mean_no2,
+                  color = regime_label)) +
+  geom_point(size = 0.4, alpha = 0.6, na.rm = TRUE) +
+  scale_y_continuous(labels = label_scientific()) +
+  labs(title = paste("Full-history daily BAAQMD area-weighted mean",
+                     "satellite NO2 column"),
+       subtitle = paste("Colored by contributor-scoped processor",
+                        "regime (diagnostic convention). Gaps are",
+                        "missing days - never interpolated."),
+       x = "Bay Area local date", y = "mol/m²",
+       color = "Contributor regime") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom")
+```
+
+# Section 4 — Coverage and missingness by contributor regime
+
+```{r coverage-by-regime, eval = data_available}
+coverage_by_regime <- daily %>%
+  mutate(regime = coalesce(regime_label, "(no contributor regime)")) %>%
+  group_by(regime) %>%
+  summarise(
+    n_days = n(),
+    n_valid_days = sum(has_valid_value == 1, na.rm = TRUE),
+    pct_valid_days = 100 * n_valid_days / n_days,
+    n_no_product_days = sum(daily_distinct_product_count == 0),
+    n_products_no_valid = sum(daily_distinct_product_count > 0 &
+                                has_valid_value == 0),
+    median_valid_fraction_valid_days =
+      median(valid_area_fraction[has_valid_value == 1], na.rm = TRUE),
+    n_non_nominal_days = sum(has_contributing_non_nominal == 1,
+                             na.rm = TRUE),
+    .groups = "drop"
+  )
+kable(coverage_by_regime, digits = 2,
+      caption = paste("Coverage and missingness by contributor-scoped",
+                      "processor regime. Days without valid",
+                      "contributors are grouped as",
+                      "'(no contributor regime)'."))
+```
+
+```{r monthly-heatmap, eval = data_available, fig.height = 5}
+monthly <- daily %>%
+  mutate(yr = year(local_date), mo = month(local_date)) %>%
+  group_by(yr, mo) %>%
+  summarise(pct_valid = 100 * mean(has_valid_value == 1, na.rm = TRUE),
+            .groups = "drop")
+ggplot(monthly, aes(x = factor(mo), y = factor(yr), fill = pct_valid)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(limits = c(0, 100)) +
+  labs(title = "Monthly coverage: % of days with a valid regional value",
+       x = "Calendar month", y = "Year", fill = "% valid days") +
+  theme_minimal(base_size = 10)
+```
+
+```{r fraction-by-season, eval = data_available, fig.height = 5}
+# Season labels are a DESCRIPTIVE grouping convention only (DJF / MAM /
+# JJA / SON), not decided methodology.
+season_of <- function(m) {
+  case_when(m %in% c(12, 1, 2) ~ "DJF",
+            m %in% 3:5 ~ "MAM",
+            m %in% 6:8 ~ "JJA",
+            TRUE ~ "SON")
+}
+daily <- daily %>%
+  mutate(season = factor(season_of(month(local_date)),
+                         levels = c("DJF", "MAM", "JJA", "SON")))
+
+ggplot(daily %>% filter(has_valid_value == 1),
+       aes(x = season, y = valid_area_fraction)) +
+  geom_boxplot(outlier.size = 0.4) +
+  facet_wrap(~ coalesce(regime_label, "(no contributor regime)")) +
+  labs(title = paste("Valid-area fraction by season and",
+                     "contributor-scoped processor regime"),
+       subtitle = "Valid days only; no coverage threshold is applied.",
+       x = "Season (descriptive convention)",
+       y = "Valid-area fraction") +
+  theme_minimal(base_size = 10)
+```
+
+```{r contributor-distributions, eval = data_available, fig.height = 4}
+ggplot(daily,
+       aes(x = factor(valid_contributor_count))) +
+  geom_bar() +
+  facet_wrap(~ coalesce(regime_label, "(no contributor regime)"), scales = "free_y") +
+  labs(title = paste("Valid-contributor count per day, by",
+                     "contributor-scoped processor regime"),
+       subtitle = paste("Contributors are products with actual valid",
+                        "BAAQMD pixels - footprint intersection alone",
+                        "is not contribution."),
+       x = "Valid contributors per day", y = "Days") +
+  theme_minimal(base_size = 10)
+
+non_nominal_by_year <- daily %>%
+  group_by(yr = year(local_date)) %>%
+  summarise(days_with_non_nominal_contributor =
+              sum(has_contributing_non_nominal == 1, na.rm = TRUE),
+            .groups = "drop")
+kable(non_nominal_by_year,
+      caption = paste("Days per year with a contributing non-NOMINAL",
+                      "product (flagged, retained, never excluded)."))
+```
+
+# Section 5 — Season-matched distributions (regime × calendar month)
+
+```{r season-matched, eval = data_available}
+season_matched <- daily %>%
+  filter(has_valid_value == 1, !is.na(regime_label)) %>%
+  group_by(regime_label, mo = month(local_date)) %>%
+  summarise(
+    n_valid_days = n(),
+    median_no2 = median(regional_mean_no2),
+    p25 = quantile(regional_mean_no2, 0.25),
+    p75 = quantile(regional_mean_no2, 0.75),
+    iqr = p75 - p25,
+    p10 = quantile(regional_mean_no2, 0.10),
+    p90 = quantile(regional_mean_no2, 0.90),
+    median_valid_fraction = median(valid_area_fraction),
+    .groups = "drop"
+  ) %>%
+  arrange(mo, regime_label)
+kable(season_matched, digits = 8,
+      caption = paste("Contributor-scoped regime × calendar-month",
+                      "distributions of the daily regional satellite",
+                      "NO2 column (mol/m²). Descriptive only -",
+                      "differences are confounded by year, meteorology,",
+                      "and emissions changes."))
+```
+
+# Section 6 — Transition diagnostics
+
+Windows of ±`r config$transition_window_days` days (display convention
+only) around each **contributor-scoped** processor-regime change (the
+scientific daily-regime timeline of Section 3, not the collection-wide
+asset timeline). **These plots and summaries
+are descriptive. A shift across a transition is NOT proof of a
+retrieval-processing effect** — season, meteorology, emissions trends,
+and coverage changes are confounded with every transition date.
+
+```{r transitions, eval = data_available, fig.height = 4}
+transitions <- contrib_regime_table %>%
+  arrange(start_date) %>%
+  mutate(prev_label = lag(regime_label)) %>%
+  filter(!is.na(prev_label)) %>%
+  select(change_date = start_date, from_regime = prev_label,
+         to_regime = regime_label)
+kable(transitions,
+      caption = "Contributor-scoped processor-regime transition dates.")
+
+w <- config$transition_window_days
+for (i in seq_len(nrow(transitions))) {
+  tr <- transitions[i, ]
+  window_data <- daily %>%
+    filter(local_date >= tr$change_date - w,
+           local_date < tr$change_date + w)
+  p <- ggplot(window_data,
+              aes(x = local_date, y = regional_mean_no2,
+                  color = coalesce(regime_label, "(no contributor regime)"))) +
+    geom_point(size = 0.8, na.rm = TRUE) +
+    # Pass the Date itself: a numeric xintercept on a Date scale raises
+    # a coercion warning on every transition plot.
+    geom_vline(xintercept = tr$change_date, linetype = "dashed") +
+    scale_y_continuous(labels = label_scientific()) +
+    labs(title = paste0("Transition ", i, ": ", tr$from_regime,
+                        " → ", tr$to_regime),
+         subtitle = paste("±", w, "days. Descriptive only - not proof",
+                          "of a processing effect."),
+         x = "Bay Area local date", y = "mol/m²", color = "Regime") +
+    theme_minimal(base_size = 10)
+  print(p)
+
+  summary_tbl <- window_data %>%
+    mutate(side = if_else(local_date < tr$change_date,
+                          "before", "after")) %>%
+    group_by(side) %>%
+    summarise(n_valid = sum(has_valid_value == 1, na.rm = TRUE),
+              median_no2 = median(regional_mean_no2, na.rm = TRUE),
+              median_valid_fraction =
+                median(valid_area_fraction[has_valid_value == 1],
+                       na.rm = TRUE),
+              .groups = "drop")
+  print(kable(summary_tbl, digits = 8,
+              caption = paste0("Transition ", i,
+                               " window summary (descriptive only; ",
+                               "seasonal confounding likely).")))
+}
+```
+
+# Section 7 — Retrospective baseline-robustness study
+
+This section replaces the earlier single-target baseline-sensitivity
+diagnostic, whose live run showed it was too weak to inform the
+baseline-restriction question: it evaluated one target month only; its
+longest-regime variant drew history from a regime that is historically
+irrelevant to recent targets (and often supplies no calendar-matched
+history at all); and an exact target-processor pool is frequently
+unavailable after processor changes. The study below evaluates the
+same accepted exploratory baseline across **all eligible target months
+from `r config$retrospective_start_year` onward**.
+
+**Context (project owner).** This study was commissioned under the
+owner's policy-level adoption of **Outcome B** (2026-07-19): the Earth
+Engine OFFL record is usable for exploratory historical analysis, but
+the full 2018–present record must not be treated as unconditionally
+homogeneous. At design time the exact baseline restriction was
+undecided; this study provided the retrospective evidence for it, and
+the owner's final decision and baseline policy — recorded after review
+of the accepted full-history report — are in Section 8. Nothing is
+selected by this section's computations: no baseline variant, no
+coverage threshold, no correction factor, no episode rule. Differences
+reported below are **not** attributed to retrieval processing —
+season, meteorology, emission trends, and coverage changes remain
+plausible confounders throughout.
+
+**Accepted exploratory baseline (script 06, reimplemented here).** For
+a target day: pool the non-null daily area-weighted regional means
+(mol/m²) of the SAME calendar month in the previous
+`r config$historical_years_diagnostic` years — only dates strictly
+earlier than the target year; the baseline is the regional historical
+median; signed anomaly = target − median; percentile rank =
+100 × count(historical ≤ target) ÷ non-null historical count; no
+percentage-change metric; nulls stay null and are never interpolated.
+
+**Historical-pool variants (diagnostic conventions only).** All pools
+use the target's calendar month and only years earlier than the
+target year:
+
+| Variant | Historical pool |
+|---|---|
+| `prior-three-years` | all valid days from the previous three years (the accepted exploratory default; reference for all comparisons) |
+| `prior-one-year` | valid days from year −1 only |
+| `prior-year-minus-2` | valid days from year −2 only |
+| `prior-year-minus-3` | valid days from year −3 only |
+| `target-processor` | prior-three-years days whose contributor processor signature exactly matches the target month's signature |
+| `target-algorithm` | prior-three-years days whose contributor algorithm signature exactly matches the target month's signature |
+
+The **prior-years-separate** variant of the study design is the three
+single-year rows taken together (`prior-one-year` ≡ year −1, plus
+year −2 and year −3): the baseline is calculated independently for
+each available prior year in the accepted three-year window instead of
+pooling them.
+
+**Signature rules.** A day's processor (algorithm) signature is its
+raw contributor-scoped
+`contributing_processor_version_set`
+(`contributing_algorithm_version_set`) string; matching is **exact
+string equality with no version normalization** (script 06's
+normalization is a display convention of that script). A target
+month's signature is defined from its with-contributor days: if they
+span more than one signature the month is reported as **mixed** and
+the signature-matched variants are recorded as UNAVAILABLE for that
+month — the dominant signature is never chosen silently; if the month
+has no with-contributor days it has no signature. Signature-matched
+variants are also recorded as unavailable when no historical day
+matches; every unavailability carries an explicit reason.
+
+**Eligibility rule.** A target month is eligible when its year is ≥
+`r config$retrospective_start_year` and **every calendar day of the
+month is present in the daily export** (script 07 exports a row for
+every requested day, so this excludes the trailing partial month and
+would surface any export gap). Every calendar day of an eligible month
+is a target day; days without a valid regional value are retained with
+an explicit reason, never silently dropped.
+
+**Window-representation rule.** The exported record begins partway
+through its first year, so early target months have structurally
+incomplete historical windows even when their pool is non-empty.
+`baseline_available` therefore continues to mean a **non-empty
+computable pool**, while a separate flag,
+`full_requested_year_window`, records whether **every requested prior
+year supplied at least one valid same-calendar-month day** (after the
+variant's signature filtering, where applicable). Target months whose
+prior-three-years REFERENCE window is partial are never discarded:
+they are reported as partial-window diagnostics and summarized in a
+clearly labeled **SUPPLEMENTAL** set, while **PRIMARY** robustness
+summaries include only target months whose reference window contains
+all three requested prior years. All dates are derived dynamically
+from the exported record — no first-eligible date is hard-coded.
+
+The 90th/10th references are descriptive labels only — never episode
+labels. This section measures **robustness of the exploratory
+diagnostics to the historical pool** — it does not select a baseline
+method.
+
+## Eligible target months and month-level signatures
+
+```{r retro-eligibility, eval = data_available}
+n_hist_years <- config$historical_years_diagnostic
+
+month_completeness <- daily %>%
+  mutate(target_month = floor_date(local_date, "month")) %>%
+  group_by(target_month) %>%
+  summarise(n_days_present = n_distinct(local_date), .groups = "drop") %>%
+  mutate(n_days_in_month = as.integer(days_in_month(target_month)),
+         is_complete = n_days_present == n_days_in_month)
+
+retro_candidate_months <- month_completeness %>%
+  filter(year(target_month) >= config$retrospective_start_year)
+excluded_months <- retro_candidate_months %>% filter(!is_complete)
+eligible_months <- retro_candidate_months %>%
+  filter(is_complete) %>%
+  pull(target_month)
+
+cat("Candidate months from", config$retrospective_start_year,
+    "onward:", nrow(retro_candidate_months),
+    "| eligible (every calendar day exported):",
+    length(eligible_months),
+    "| excluded as incomplete:", nrow(excluded_months), "\n")
+if (nrow(excluded_months) > 0) {
+  kable(excluded_months,
+        caption = paste("Months excluded from the retrospective study",
+                        "(incomplete daily coverage in the export -",
+                        "typically the trailing partial month)."))
+}
+```
+
+```{r retro-signatures, eval = data_available}
+contributor_days_by_month <- daily %>%
+  mutate(target_month = floor_date(local_date, "month")) %>%
+  filter(valid_contributor_count > 0) %>%
+  group_by(target_month) %>%
+  summarise(
+    proc_signatures =
+      list(sort(unique(contributing_processor_version_set))),
+    alg_signatures =
+      list(sort(unique(contributing_algorithm_version_set))),
+    n_contributor_days = n(),
+    .groups = "drop")
+
+month_signature_tbl <- tibble(target_month = eligible_months) %>%
+  left_join(contributor_days_by_month, by = "target_month") %>%
+  mutate(
+    proc_signatures = map(proc_signatures,
+                          ~ if (is.null(.x)) character(0) else .x),
+    alg_signatures = map(alg_signatures,
+                         ~ if (is.null(.x)) character(0) else .x),
+    n_contributor_days = replace_na(n_contributor_days, 0L),
+    proc_signature_status = case_when(
+      lengths(proc_signatures) == 0 ~ "none",
+      lengths(proc_signatures) == 1 ~ "unique",
+      TRUE ~ "mixed"),
+    alg_signature_status = case_when(
+      lengths(alg_signatures) == 0 ~ "none",
+      lengths(alg_signatures) == 1 ~ "unique",
+      TRUE ~ "mixed"),
+    proc_signature_display = map_chr(proc_signatures, paste,
+                                     collapse = " | "),
+    alg_signature_display = map_chr(alg_signatures, paste,
+                                    collapse = " | "))
+
+kable(month_signature_tbl %>%
+        count(proc_signature_status, alg_signature_status),
+      caption = paste("Eligible target months by month-level",
+                      "contributor-signature status. 'mixed' months",
+                      "are reported as such; their signature-matched",
+                      "variants are unavailable - no dominant",
+                      "signature is ever chosen."))
+
+mixed_or_none_months <- month_signature_tbl %>%
+  filter(proc_signature_status != "unique" |
+           alg_signature_status != "unique") %>%
+  select(target_month, proc_signature_status, proc_signature_display,
+         alg_signature_status, alg_signature_display)
+if (nrow(mixed_or_none_months) > 0) {
+  kable(mixed_or_none_months,
+        caption = paste("Eligible target months whose processor or",
+                        "algorithm signature is mixed or absent (raw",
+                        "contributor-scoped set strings)."))
+} else {
+  cat("Every eligible target month has unique contributor",
+      "signatures.\n")
+}
+```
+
+## Variant baselines for every retrospective target day
+
+Historical pools depend only on the target month (never on the target
+day), so pools are built once per month × variant and then joined to
+every target day. For every variant × target day the table retains:
+historical sample size, historical median, signed anomaly, percentile
+rank, availability and its reason, the target day's valid-area
+fraction, and the target's processor and algorithm signatures (day-
+and month-level). Each month × variant row additionally records its
+requested prior years and their representation:
+`requested_prior_year_count`, `prior_year_labels_requested`,
+`prior_year_labels_with_valid_values`,
+`prior_year_count_with_valid_values`, `missing_prior_year_labels`,
+`full_requested_year_window`, and the valid historical day count by
+source year (`hist_n_by_source_year`). For the signature-matched
+variants these are computed AFTER signature filtering, and they are
+`NA` when the pool cannot be formed at all (mixed or absent month
+signature).
+
+```{r retro-variants, eval = data_available}
+valid_daily_retro <- daily %>%
+  filter(has_valid_value == 1) %>%
+  mutate(mo = month(local_date), yr = year(local_date))
+
+variant_levels <- c("prior-three-years", "prior-one-year",
+                    "prior-year-minus-2", "prior-year-minus-3",
+                    "target-processor", "target-algorithm")
+
+month_variant_pools <-
+  map_dfr(seq_len(nrow(month_signature_tbl)), function(i) {
+    msig <- month_signature_tbl[i, ]
+    tm <- msig$target_month
+    m <- month(tm)
+    ty <- year(tm)
+    base_pool <- valid_daily_retro %>%
+      filter(mo == m, yr >= ty - n_hist_years, yr <= ty - 1)
+
+    # `formed = FALSE` marks signature pools that cannot be formed at
+    # all (mixed or absent month signature): their representation
+    # fields are NA rather than a misleading "all years missing".
+    spec <- function(variant, requested_years, pool, formed,
+                     available, reason) {
+      represented <- if (formed) sort(unique(pool$yr)) else integer(0)
+      missing_years <- setdiff(requested_years, represented)
+      per_year_counts <- vapply(requested_years,
+                                function(y) sum(pool$yr == y),
+                                integer(1))
+      tibble(
+        target_month = tm, variant = variant,
+        hist_values = list(pool$regional_mean_no2),
+        hist_n = nrow(pool),
+        baseline_available = available, baseline_reason = reason,
+        requested_prior_year_count = length(requested_years),
+        prior_year_labels_requested =
+          paste(requested_years, collapse = " | "),
+        prior_year_labels_with_valid_values =
+          if (formed) paste(represented, collapse = " | ") else
+            NA_character_,
+        prior_year_count_with_valid_values =
+          if (formed) length(represented) else NA_integer_,
+        missing_prior_year_labels =
+          if (formed) paste(missing_years, collapse = " | ") else
+            NA_character_,
+        full_requested_year_window =
+          if (formed) length(missing_years) == 0 else NA,
+        hist_n_by_source_year =
+          if (formed) {
+            paste(paste0(requested_years, ":", per_year_counts),
+                  collapse = " | ")
+          } else {
+            NA_character_
+          })
+    }
+    pooled_spec <- function(variant, requested_years, pool,
+                            empty_reason) {
+      spec(variant, requested_years, pool, formed = TRUE,
+           available = nrow(pool) > 0,
+           reason = if (nrow(pool) > 0) "ok" else empty_reason)
+    }
+    signature_spec <- function(variant, status, signatures, column) {
+      requested_years <- (ty - n_hist_years):(ty - 1)
+      if (status == "none") {
+        spec(variant, requested_years, base_pool[0, ], formed = FALSE,
+             available = FALSE,
+             reason = "target month has no days with valid contributors")
+      } else if (status == "mixed") {
+        spec(variant, requested_years, base_pool[0, ], formed = FALSE,
+             available = FALSE,
+             reason = paste0("target month mixed signatures: ",
+                             paste(signatures, collapse = " | ")))
+      } else {
+        pooled_spec(variant, requested_years,
+                    base_pool %>%
+                      filter(.data[[column]] == signatures[[1]]),
+                    paste("no signature-matched valid days in the",
+                          "previous three years"))
+      }
+    }
+
+    bind_rows(
+      pooled_spec("prior-three-years", (ty - n_hist_years):(ty - 1),
+                  base_pool,
+                  paste("no valid same-calendar-month days in the",
+                        "previous three years")),
+      pooled_spec("prior-one-year", ty - 1,
+                  filter(base_pool, yr == ty - 1),
+                  "no valid same-calendar-month days in year -1"),
+      pooled_spec("prior-year-minus-2", ty - 2,
+                  filter(base_pool, yr == ty - 2),
+                  "no valid same-calendar-month days in year -2"),
+      pooled_spec("prior-year-minus-3", ty - 3,
+                  filter(base_pool, yr == ty - 3),
+                  "no valid same-calendar-month days in year -3"),
+      signature_spec("target-processor", msig$proc_signature_status,
+                     msig$proc_signatures[[1]],
+                     "contributing_processor_version_set"),
+      signature_spec("target-algorithm", msig$alg_signature_status,
+                     msig$alg_signatures[[1]],
+                     "contributing_algorithm_version_set")
+    )
+  }) %>%
+  mutate(hist_median = map_dbl(hist_values, ~ if (length(.x) > 0) {
+           median(.x)
+         } else {
+           NA_real_
+         }),
+         hist_small_sample_flag = baseline_available &
+           hist_n < config$small_sample_flag_n)
+
+retro_target_days <- daily %>%
+  mutate(target_month = floor_date(local_date, "month")) %>%
+  filter(target_month %in% eligible_months) %>%
+  transmute(
+    target_month, local_date, season,
+    target_mean = regional_mean_no2,
+    target_valid_area_fraction = valid_area_fraction,
+    target_day_processor_signature =
+      na_if(contributing_processor_version_set, ""),
+    target_day_algorithm_signature =
+      na_if(contributing_algorithm_version_set, "")) %>%
+  left_join(month_signature_tbl %>%
+              select(target_month,
+                     target_month_processor_status =
+                       proc_signature_status,
+                     target_month_processor_signatures =
+                       proc_signature_display,
+                     target_month_algorithm_status =
+                       alg_signature_status,
+                     target_month_algorithm_signatures =
+                       alg_signature_display),
+            by = "target_month")
+
+retro_results <- month_variant_pools %>%
+  inner_join(retro_target_days, by = "target_month",
+             relationship = "many-to-many") %>%
+  mutate(
+    signed_anomaly = if_else(baseline_available & !is.na(target_mean),
+                             target_mean - hist_median, NA_real_),
+    percentile_rank = pmap_dbl(
+      list(hist_values, target_mean, baseline_available),
+      function(h, t, available) {
+        if (!available || is.na(t)) return(NA_real_)
+        100 * sum(h <= t) / length(h)
+      }),
+    result_reason = case_when(
+      !baseline_available ~ baseline_reason,
+      is.na(target_mean) ~ "target day has no valid regional value",
+      TRUE ~ "ok"),
+    variant = factor(variant, levels = variant_levels)) %>%
+  select(-hist_values) %>%
+  arrange(local_date, variant)
+
+cat("Retrospective evaluation:", length(eligible_months),
+    "target months,", nrow(retro_target_days), "target days,",
+    length(variant_levels), "variants,", nrow(retro_results),
+    "variant x day rows (all retained in `retro_results`).\n")
+
+kable(retro_results %>%
+        filter(local_date == min(local_date)) %>%
+        select(variant, local_date, target_mean, hist_n, hist_median,
+               signed_anomaly, percentile_rank,
+               full_requested_year_window, hist_n_by_source_year,
+               result_reason),
+      digits = 8,
+      caption = paste("Example: all variant rows for the first",
+                      "retrospective target day. The full per-day",
+                      "table additionally retains the valid-area",
+                      "fraction, the day- and month-level signature",
+                      "columns, the remaining prior-year",
+                      "representation fields, and the small-sample",
+                      "display flag."))
+```
+
+## Prior-year window representation (full vs partial)
+
+A **non-empty pool** (`baseline_available`) is deliberately distinct
+from a **fully represented window** (`full_requested_year_window`):
+the pool can be computable while one or more requested prior years
+supplied no valid same-calendar-month day at all, because the exported
+record begins partway through its first year. Partial-window target
+months are retained as diagnostics below and summarized in the
+SUPPLEMENTAL sets — never discarded, and never presented as equivalent
+to the full three-year baseline.
+
+```{r retro-windows, eval = data_available}
+window_by_variant <- month_variant_pools %>%
+  mutate(variant = factor(variant, levels = variant_levels)) %>%
+  group_by(variant) %>%
+  summarise(n_target_months = n(),
+            n_full_window = sum(full_requested_year_window %in% TRUE),
+            n_partial_window =
+              sum(full_requested_year_window %in% FALSE),
+            n_pool_not_formed =
+              sum(is.na(full_requested_year_window)),
+            .groups = "drop")
+kable(window_by_variant,
+      caption = paste("Requested-window representation by variant.",
+                      "'partial' = pool formable but at least one",
+                      "requested prior year supplied no valid day",
+                      "(after signature filtering, where applicable);",
+                      "'not formed' = signature pool not formable",
+                      "(mixed or absent month signature)."))
+
+reference_windows <- month_variant_pools %>%
+  filter(variant == "prior-three-years") %>%
+  select(target_month, requested_prior_year_count,
+         prior_year_labels_requested,
+         prior_year_labels_with_valid_values,
+         prior_year_count_with_valid_values,
+         missing_prior_year_labels, full_requested_year_window,
+         hist_n, hist_n_by_source_year)
+
+# Classification used by every PRIMARY / SUPPLEMENTAL split below:
+# the REFERENCE (prior-three-years) window status of the target month.
+reference_window_tbl <- reference_windows %>%
+  transmute(target_month,
+            reference_window = factor(
+              if_else(full_requested_year_window,
+                      "full three-year window", "partial window"),
+              levels = c("full three-year window", "partial window")))
+
+cat("Prior-three-years REFERENCE windows:",
+    sum(reference_windows$full_requested_year_window),
+    "target months with all three requested prior years represented;",
+    sum(!reference_windows$full_requested_year_window),
+    "structurally partial (retained; summarized separately).\n")
+
+partial_window_diagnostics <- reference_windows %>%
+  filter(!full_requested_year_window) %>%
+  select(target_month, prior_year_labels_with_valid_values,
+         missing_prior_year_labels, hist_n, hist_n_by_source_year)
+if (nrow(partial_window_diagnostics) > 0) {
+  kable(partial_window_diagnostics,
+        caption = paste("Partial-window diagnostics: eligible target",
+                        "months whose prior-three-years reference",
+                        "window is structurally incomplete because",
+                        "the exported record does not cover every",
+                        "requested prior year. Retained - excluded",
+                        "from PRIMARY summaries and reported in the",
+                        "SUPPLEMENTAL set."))
+} else {
+  cat("Every eligible target month has a full three-year reference",
+      "window.\n")
+}
+
+first_full_window <- reference_windows %>%
+  filter(full_requested_year_window) %>%
+  group_by(calendar_month = month(target_month)) %>%
+  summarise(first_full_window_target_month = min(target_month),
+            .groups = "drop") %>%
+  right_join(tibble(calendar_month = 1:12),
+             by = "calendar_month") %>%
+  arrange(calendar_month)
+kable(first_full_window,
+      caption = paste("First target month with a full three-year",
+                      "reference window, per calendar month (derived",
+                      "from the exported record; NA = never achieved",
+                      "in the exported range)."))
+```
+
+## Availability of signature-matched baselines
+
+```{r retro-availability, eval = data_available}
+availability_summary <- retro_results %>%
+  group_by(variant) %>%
+  summarise(
+    n_target_days = n(),
+    n_baseline_available = sum(baseline_available),
+    pct_baseline_unavailable = 100 * mean(!baseline_available),
+    n_anomaly_computed = sum(!is.na(percentile_rank)),
+    median_hist_n_when_available = median(hist_n[baseline_available]),
+    n_small_sample_days = sum(hist_small_sample_flag),
+    .groups = "drop")
+kable(availability_summary, digits = 1,
+      caption = paste("Availability per variant.",
+                      "pct_baseline_unavailable is the percentage of",
+                      "target days whose historical pool could not be",
+                      "formed; anomalies additionally require a valid",
+                      "target day. The small-sample flag is a display",
+                      "convention, not a threshold."))
+
+reason_breakdown <- retro_results %>%
+  mutate(reason_class = if_else(
+    str_starts(result_reason, "target month mixed signatures"),
+    "target month mixed signatures (variant unavailable)",
+    result_reason)) %>%
+  count(variant, reason_class) %>%
+  pivot_wider(names_from = variant, values_from = n,
+              values_fill = 0)
+kable(reason_breakdown,
+      caption = paste("Target-day counts by result reason and",
+                      "variant (mixed-signature reasons grouped for",
+                      "display; the per-day table keeps the full",
+                      "signature lists)."))
+
+signature_month_availability <- month_variant_pools %>%
+  filter(variant %in% c("target-processor", "target-algorithm")) %>%
+  group_by(variant) %>%
+  summarise(n_target_months = n(),
+            n_months_available = sum(baseline_available),
+            pct_months_unavailable = 100 * mean(!baseline_available),
+            .groups = "drop")
+kable(signature_month_availability, digits = 1,
+      caption = paste("Month-level availability of the",
+                      "signature-matched variants."))
+
+signature_unavailability_by_year <- retro_results %>%
+  filter(variant %in% c("target-processor", "target-algorithm")) %>%
+  group_by(variant, target_year = year(local_date)) %>%
+  summarise(pct_days_unavailable = 100 * mean(!baseline_available),
+            .groups = "drop") %>%
+  pivot_wider(names_from = variant,
+              values_from = pct_days_unavailable)
+kable(signature_unavailability_by_year, digits = 1,
+      caption = paste("Percentage of target days with an unavailable",
+                      "signature-matched baseline, by target year."))
+```
+
+## Robustness relative to the prior-three-years reference
+
+All comparisons below use `prior-three-years` (the accepted
+exploratory default) as the reference and are **conditional on
+availability**: a variant is compared only on days where both it and
+the reference produce a value. Sign agreement uses exact `sign()`
+equality (an exact-zero anomaly would count as its own category).
+Every summary is reported in two sets: **PRIMARY** (target months
+whose reference window contains all three requested prior years) and
+**SUPPLEMENTAL** (partial-window months — structurally incomplete and
+not directly equivalent to the full three-year baseline).
+
+```{r retro-agreement, eval = data_available}
+reference_variant <- "prior-three-years"
+reference_tbl <- retro_results %>%
+  filter(variant == reference_variant) %>%
+  select(local_date, ref_anomaly = signed_anomaly,
+         ref_pct = percentile_rank)
+
+comparison <- retro_results %>%
+  filter(variant != reference_variant) %>%
+  inner_join(reference_tbl, by = "local_date") %>%
+  filter(!is.na(percentile_rank), !is.na(ref_pct)) %>%
+  left_join(reference_window_tbl, by = "target_month") %>%
+  mutate(abs_pct_diff = abs(percentile_rank - ref_pct),
+         sign_agrees = sign(signed_anomaly) == sign(ref_anomaly))
+
+comparison_primary <- comparison %>%
+  filter(reference_window == "full three-year window")
+comparison_supplemental <- comparison %>%
+  filter(reference_window == "partial window")
+cat("Comparable variant x day rows - PRIMARY (full reference",
+    "window):", nrow(comparison_primary),
+    "| SUPPLEMENTAL (partial reference window):",
+    nrow(comparison_supplemental), "\n")
+
+summarise_agreement <- function(df) {
+  df %>%
+    group_by(variant) %>%
+    summarise(n_days_compared = n(),
+              pct_sign_agreement = 100 * mean(sign_agrees),
+              n_sign_disagreements = sum(!sign_agrees),
+              median_abs_pct_diff = median(abs_pct_diff),
+              max_abs_pct_diff = max(abs_pct_diff),
+              .groups = "drop")
+}
+kable(summarise_agreement(comparison_primary), digits = 1,
+      caption = paste("PRIMARY - anomaly-sign agreement and",
+                      "percentile-rank differences vs the",
+                      "prior-three-years reference (full",
+                      "three-year reference windows only)."))
+kable(summarise_agreement(comparison_supplemental), digits = 1,
+      caption = paste("SUPPLEMENTAL - same metrics for the",
+                      "partial-window target months (one or two",
+                      "represented prior years): structurally",
+                      "incomplete, not directly equivalent to the",
+                      "full three-year baseline."))
+```
+
+```{r retro-tails, eval = data_available}
+summarise_tails <- function(df) {
+  df %>%
+    group_by(variant) %>%
+    summarise(
+      n_ref_gt90 = sum(ref_pct > 90),
+      n_variant_gt90 = sum(percentile_rank > 90),
+      n_both_gt90 = sum(ref_pct > 90 & percentile_rank > 90),
+      jaccard_gt90 = if_else(
+        n_ref_gt90 + n_variant_gt90 - n_both_gt90 > 0,
+        n_both_gt90 / (n_ref_gt90 + n_variant_gt90 - n_both_gt90),
+        NA_real_),
+      n_ref_lt10 = sum(ref_pct < 10),
+      n_variant_lt10 = sum(percentile_rank < 10),
+      n_both_lt10 = sum(ref_pct < 10 & percentile_rank < 10),
+      jaccard_lt10 = if_else(
+        n_ref_lt10 + n_variant_lt10 - n_both_lt10 > 0,
+        n_both_lt10 / (n_ref_lt10 + n_variant_lt10 - n_both_lt10),
+        NA_real_),
+      .groups = "drop")
+}
+kable(summarise_tails(comparison_primary), digits = 2,
+      caption = paste("PRIMARY - overlap of DESCRIPTIVE >90th and",
+                      "<10th percentile dates with the reference",
+                      "(Jaccard = shared / union; NA when neither",
+                      "side has such days). Full three-year",
+                      "reference windows only. Descriptive",
+                      "references - never episode labels."))
+kable(summarise_tails(comparison_supplemental), digits = 2,
+      caption = paste("SUPPLEMENTAL - same overlap metrics for the",
+                      "structurally incomplete partial-window",
+                      "target months."))
+```
+
+## Robustness by calendar month and descriptive season
+
+```{r retro-by-month, eval = data_available, fig.height = 6}
+agreement_by_month <- comparison %>%
+  mutate(mo = month(local_date)) %>%
+  group_by(reference_window, variant, mo) %>%
+  summarise(n_days_compared = n(),
+            pct_sign_agreement = 100 * mean(sign_agrees),
+            median_abs_pct_diff = median(abs_pct_diff),
+            .groups = "drop")
+
+month_pivot <- function(df, value_col) {
+  df %>%
+    select(mo, variant, all_of(value_col)) %>%
+    pivot_wider(names_from = variant,
+                values_from = all_of(value_col))
+}
+by_month_primary <- agreement_by_month %>%
+  filter(reference_window == "full three-year window")
+by_month_supplemental <- agreement_by_month %>%
+  filter(reference_window == "partial window")
+
+kable(month_pivot(by_month_primary, "median_abs_pct_diff"),
+      digits = 1,
+      caption = paste("PRIMARY - median |percentile-rank difference|",
+                      "vs the reference, by calendar month (full",
+                      "three-year reference windows only)."))
+kable(month_pivot(by_month_primary, "pct_sign_agreement"),
+      digits = 1,
+      caption = paste("PRIMARY - anomaly-sign agreement (%) vs the",
+                      "reference, by calendar month."))
+kable(month_pivot(by_month_supplemental, "median_abs_pct_diff"),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - median |percentile-rank",
+                      "difference| by calendar month for the",
+                      "structurally incomplete partial-window",
+                      "months."))
+kable(month_pivot(by_month_supplemental, "pct_sign_agreement"),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - anomaly-sign agreement (%) by",
+                      "calendar month for the partial-window",
+                      "months."))
+
+ggplot(agreement_by_month,
+       aes(x = factor(mo), y = variant,
+           fill = median_abs_pct_diff)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c() +
+  facet_wrap(~ reference_window, ncol = 1) +
+  labs(title = paste("Median |percentile-rank difference| vs the",
+                     "prior-three-years reference"),
+       subtitle = paste("Conditional on availability; cells without",
+                        "comparable days are blank. Partial-window",
+                        "panel is structurally incomplete."),
+       x = "Calendar month", y = NULL,
+       fill = "Median |Δ percentile|") +
+  theme_minimal(base_size = 10)
+```
+
+```{r retro-by-season, eval = data_available}
+agreement_by_season <- comparison %>%
+  group_by(reference_window, variant, season) %>%
+  summarise(n_days_compared = n(),
+            pct_sign_agreement = 100 * mean(sign_agrees),
+            median_abs_pct_diff = median(abs_pct_diff),
+            max_abs_pct_diff = max(abs_pct_diff),
+            .groups = "drop")
+kable(agreement_by_season %>%
+        filter(reference_window == "full three-year window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("PRIMARY - robustness metrics by descriptive",
+                      "season (DJF/MAM/JJA/SON display convention;",
+                      "full three-year reference windows only)."))
+kable(agreement_by_season %>%
+        filter(reference_window == "partial window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - robustness metrics by",
+                      "descriptive season for the structurally",
+                      "incomplete partial-window months."))
+```
+
+## Robustness by processor-transition period
+
+Transition periods are the merged ±`r config$transition_window_days`-day
+windows (display convention) around the contributor-scoped
+processor-regime transition dates of Section 6. **In-period vs
+out-of-period differences are confounded with season** — transitions
+cluster in particular calendar months — and are never proof of a
+processing effect.
+
+```{r retro-transitions, eval = data_available}
+w <- config$transition_window_days
+transition_windows <- transitions %>%
+  arrange(change_date) %>%
+  mutate(win_start = change_date - w, win_end = change_date + w)
+
+periods <- list()
+current <- NULL
+for (i in seq_len(nrow(transition_windows))) {
+  row <- transition_windows[i, ]
+  if (is.null(current) || row$win_start > current$period_end) {
+    if (!is.null(current)) periods[[length(periods) + 1]] <- current
+    current <- tibble(period_start = row$win_start,
+                      period_end = row$win_end,
+                      n_transitions = 1L)
+  } else {
+    current$period_end <- max(current$period_end, row$win_end)
+    current$n_transitions <- current$n_transitions + 1L
+  }
+}
+if (!is.null(current)) periods[[length(periods) + 1]] <- current
+transition_periods <- bind_rows(periods) %>%
+  mutate(period_id = row_number(), .before = 1)
+kable(transition_periods,
+      caption = paste("Merged transition periods (overlapping ±", w,
+                      "-day windows around contributor-regime",
+                      "transitions are combined)."))
+
+date_transition_flag <- retro_target_days %>%
+  distinct(local_date) %>%
+  mutate(in_transition_period = map_lgl(local_date, function(d) {
+    any(transition_periods$period_start <= d &
+          d <= transition_periods$period_end)
+  }))
+
+transition_agreement <- comparison %>%
+  left_join(date_transition_flag, by = "local_date") %>%
+  group_by(reference_window, variant, in_transition_period) %>%
+  summarise(n_days_compared = n(),
+            pct_sign_agreement = 100 * mean(sign_agrees),
+            median_abs_pct_diff = median(abs_pct_diff),
+            max_abs_pct_diff = max(abs_pct_diff),
+            .groups = "drop")
+kable(transition_agreement %>%
+        filter(reference_window == "full three-year window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("PRIMARY - robustness metrics inside vs",
+                      "outside transition periods (full three-year",
+                      "reference windows only; descriptive only;",
+                      "seasonally confounded)."))
+kable(transition_agreement %>%
+        filter(reference_window == "partial window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - same metrics for the",
+                      "structurally incomplete partial-window",
+                      "months (descriptive only; seasonally",
+                      "confounded)."))
+
+transition_availability <- retro_results %>%
+  left_join(date_transition_flag, by = "local_date") %>%
+  filter(variant %in% c("target-processor", "target-algorithm")) %>%
+  group_by(variant, in_transition_period) %>%
+  summarise(n_target_days = n(),
+            pct_baseline_unavailable =
+              100 * mean(!baseline_available),
+            .groups = "drop")
+kable(transition_availability, digits = 1,
+      caption = paste("Unavailability of signature-matched baselines",
+                      "inside vs outside transition periods."))
+```
+
+## Coverage sensitivity for the prior-three-years baseline (candidates only)
+
+The coverage values below are **sensitivity candidates only — none is
+an adopted threshold**. Each candidate filters BOTH the historical
+pool and the target day by the day's valid-area fraction
+("any-valid" = every day with a valid regional value, i.e. no
+coverage filter, matching the accepted exploratory rule). Under a
+candidate filter, a prior year counts as **represented only when at
+least one historical day from that source year survives the filter**,
+so raising the candidate can change a target month from a full
+three-year window to a partial one — such changes are reported below,
+never applied silently. Every target-month-based coverage summary
+below is split into PRIMARY and SUPPLEMENTAL sets using the same
+reference classification as the rest of Section 7 — the target
+month's any-valid prior-three-years reference window (that pool is
+the reference pool by construction). Only the whole-export seasonal
+retention table remains global: it is a contextual sampling
+diagnostic over all valid days in the export, not defined over
+retrospective target months.
+
+```{r coverage-sensitivity, eval = data_available, fig.height = 5}
+coverage_candidates <- tibble(
+  min_fraction = config$coverage_candidates,
+  candidate = if_else(config$coverage_candidates == 0, "any-valid",
+                      paste0(">=", format(config$coverage_candidates,
+                                          nsmall = 2))))
+
+coverage_month_windows <-
+  map_dfr(seq_len(nrow(coverage_candidates)), function(ci) {
+    cand_label <- coverage_candidates$candidate[[ci]]
+    min_fraction <- coverage_candidates$min_fraction[[ci]]
+    map_dfr(eligible_months, function(tm) {
+      m <- month(tm)
+      ty <- year(tm)
+      requested_years <- (ty - n_hist_years):(ty - 1)
+      hist_pool <- valid_daily_retro %>%
+        filter(mo == m, yr >= ty - n_hist_years, yr <= ty - 1,
+               valid_area_fraction >= min_fraction)
+      represented <- sort(unique(hist_pool$yr))
+      tibble(candidate = cand_label, target_month = tm,
+             hist_values = list(hist_pool$regional_mean_no2),
+             hist_n = nrow(hist_pool),
+             hist_median = if (nrow(hist_pool) > 0) {
+               median(hist_pool$regional_mean_no2)
+             } else {
+               NA_real_
+             },
+             prior_year_count_with_valid_values =
+               length(represented),
+             missing_prior_year_labels =
+               paste(setdiff(requested_years, represented),
+                     collapse = " | "),
+             full_requested_year_window =
+               length(setdiff(requested_years, represented)) == 0,
+             hist_n_by_source_year =
+               paste(paste0(requested_years, ":",
+                            vapply(requested_years,
+                                   function(y) sum(hist_pool$yr == y),
+                                   integer(1))),
+                     collapse = " | "))
+    })
+  }) %>%
+  mutate(candidate = factor(candidate,
+                            levels = coverage_candidates$candidate)) %>%
+  left_join(reference_window_tbl, by = "target_month")
+
+coverage_results <- coverage_month_windows %>%
+  select(candidate, target_month, reference_window, hist_values,
+         hist_n, hist_median) %>%
+  inner_join(retro_target_days, by = "target_month",
+             relationship = "many-to-many") %>%
+  mutate(
+    min_fraction =
+      coverage_candidates$min_fraction[as.integer(candidate)],
+    target_retained = !is.na(target_mean) &
+      target_valid_area_fraction >= min_fraction,
+    signed_anomaly = if_else(target_retained & hist_n > 0,
+                             target_mean - hist_median, NA_real_),
+    percentile_rank = pmap_dbl(
+      list(hist_values, target_mean, target_retained),
+      function(h, t, retained) {
+        if (!retained || length(h) == 0) return(NA_real_)
+        100 * sum(h <= t) / length(h)
+      })) %>%
+  select(-hist_values, -min_fraction)
+
+cat("Coverage candidate x day rows - PRIMARY (full reference",
+    "window):",
+    sum(coverage_results$reference_window ==
+          "full three-year window"),
+    "| SUPPLEMENTAL (partial reference window):",
+    sum(coverage_results$reference_window == "partial window"), "\n")
+
+coverage_target_summary <- coverage_results %>%
+  group_by(reference_window, candidate) %>%
+  summarise(n_target_days = n(),
+            n_target_days_retained = sum(target_retained),
+            pct_target_days_retained = 100 * mean(target_retained),
+            n_anomaly_computed = sum(!is.na(percentile_rank)),
+            .groups = "drop")
+kable(coverage_target_summary %>%
+        filter(reference_window == "full three-year window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("PRIMARY - target-day retention per coverage",
+                      "candidate (full three-year reference windows",
+                      "only; sensitivity candidates only)."))
+kable(coverage_target_summary %>%
+        filter(reference_window == "partial window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - target-day retention per",
+                      "coverage candidate for the structurally",
+                      "incomplete partial-window months."))
+
+any_valid_windows <- coverage_month_windows %>%
+  filter(candidate == "any-valid") %>%
+  select(target_month,
+         any_valid_full_window = full_requested_year_window,
+         any_valid_year_count = prior_year_count_with_valid_values)
+# For the any-valid rows the two change metrics are zero by
+# construction (the candidate IS the comparison pool).
+coverage_month_windows_vs_any_valid <- coverage_month_windows %>%
+  left_join(any_valid_windows, by = "target_month") %>%
+  mutate(lost_source_year = prior_year_count_with_valid_values <
+           any_valid_year_count,
+         full_to_partial = any_valid_full_window &
+           !full_requested_year_window)
+
+coverage_pool_summary <- coverage_month_windows_vs_any_valid %>%
+  group_by(reference_window, candidate) %>%
+  summarise(n_target_months = n(),
+            median_hist_n_per_month = median(hist_n),
+            min_hist_n = min(hist_n),
+            n_months_empty_pool = sum(hist_n == 0),
+            n_months_full_window = sum(full_requested_year_window),
+            n_months_partial_window =
+              sum(!full_requested_year_window),
+            n_months_losing_a_source_year = sum(lost_source_year),
+            n_months_full_to_partial = sum(full_to_partial),
+            .groups = "drop")
+kable(coverage_pool_summary %>%
+        filter(reference_window == "full three-year window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("PRIMARY - historical prior-three-years pool",
+                      "sizes, candidate-specific window",
+                      "representation, and source-year changes vs",
+                      "the any-valid pool, for target months with a",
+                      "full any-valid reference window (a source",
+                      "year counts as represented only when at least",
+                      "one of its days survives the candidate",
+                      "filter)."))
+kable(coverage_pool_summary %>%
+        filter(reference_window == "partial window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - same pool and window metrics",
+                      "for the structurally incomplete",
+                      "partial-window target months."))
+
+demoted_months <- coverage_month_windows_vs_any_valid %>%
+  filter(candidate != "any-valid", full_to_partial) %>%
+  select(reference_window, candidate, target_month,
+         missing_prior_year_labels, hist_n_by_source_year)
+if (nrow(demoted_months) > 0) {
+  kable(demoted_months,
+        caption = paste("Target months whose reference window",
+                        "changes from full to partial under a",
+                        "candidate coverage filter (reported, never",
+                        "silently applied)."))
+} else {
+  cat("No candidate coverage filter changes any full three-year",
+      "window to a partial window.\n")
+}
+
+historical_retention_by_season <-
+  map_dfr(seq_len(nrow(coverage_candidates)), function(ci) {
+    valid_daily_retro %>%
+      filter(valid_area_fraction >=
+               coverage_candidates$min_fraction[[ci]]) %>%
+      count(season, name = "n_valid_days_retained") %>%
+      mutate(candidate = coverage_candidates$candidate[[ci]])
+  }) %>%
+  pivot_wider(names_from = season,
+              values_from = n_valid_days_retained, values_fill = 0)
+kable(historical_retention_by_season,
+      caption = paste("Valid days retained across the WHOLE export,",
+                      "by season and coverage candidate. GLOBAL",
+                      "contextual sampling diagnostic over all valid",
+                      "days in the export - not defined over",
+                      "retrospective target months, hence",
+                      "deliberately not split into PRIMARY /",
+                      "SUPPLEMENTAL sets."))
+
+pool_size_plot <- function(df, title_prefix, subtitle_note) {
+  ggplot(df %>% mutate(mo = month(target_month)),
+         aes(x = factor(mo), y = hist_n)) +
+    geom_boxplot(outlier.size = 0.4) +
+    facet_wrap(~ candidate) +
+    labs(title = paste(title_prefix, "- historical-pool size per",
+                       "target month, by coverage candidate"),
+         subtitle = subtitle_note,
+         x = "Calendar month of target",
+         y = "Historical days in pool") +
+    theme_minimal(base_size = 10)
+}
+pool_size_plot(
+  coverage_month_windows %>%
+    filter(reference_window == "full three-year window"),
+  "PRIMARY",
+  paste("Full three-year reference windows only.",
+        "Prior-three-years pools; sensitivity candidates -",
+        "no threshold is adopted."))
+pool_size_plot(
+  coverage_month_windows %>%
+    filter(reference_window == "partial window"),
+  "SUPPLEMENTAL",
+  paste("Structurally incomplete partial-window target months -",
+        "not directly equivalent to the full three-year baseline.",
+        "Prior-three-years pools; sensitivity candidates -",
+        "no threshold is adopted."))
+```
+
+```{r coverage-comparison, eval = data_available}
+coverage_reference <- coverage_results %>%
+  filter(candidate == "any-valid") %>%
+  select(local_date, ref_pct = percentile_rank,
+         ref_anomaly = signed_anomaly)
+
+# coverage_results already carries reference_window (joined from
+# reference_window_tbl above), so no re-join is needed here.
+coverage_comparison <- coverage_results %>%
+  filter(candidate != "any-valid") %>%
+  inner_join(coverage_reference, by = "local_date") %>%
+  filter(!is.na(percentile_rank), !is.na(ref_pct)) %>%
+  mutate(abs_pct_diff = abs(percentile_rank - ref_pct),
+         sign_agrees = sign(signed_anomaly) == sign(ref_anomaly))
+
+coverage_primary <- coverage_comparison %>%
+  filter(reference_window == "full three-year window")
+coverage_supplemental <- coverage_comparison %>%
+  filter(reference_window == "partial window")
+cat("Comparable candidate x day rows - PRIMARY (full reference",
+    "window):", nrow(coverage_primary),
+    "| SUPPLEMENTAL (partial reference window):",
+    nrow(coverage_supplemental), "\n")
+
+summarise_coverage <- function(df) {
+  df %>%
+    group_by(candidate) %>%
+    summarise(n_days_compared = n(),
+              n_sign_changes = sum(!sign_agrees),
+              pct_sign_agreement = 100 * mean(sign_agrees),
+              median_abs_pct_diff = median(abs_pct_diff),
+              max_abs_pct_diff = max(abs_pct_diff),
+              .groups = "drop")
+}
+kable(summarise_coverage(coverage_primary), digits = 1,
+      caption = paste("PRIMARY - percentile-rank and anomaly-sign",
+                      "changes vs the any-valid reference (days",
+                      "retained under both; full three-year",
+                      "reference windows only; sensitivity",
+                      "candidates only)."))
+kable(summarise_coverage(coverage_supplemental), digits = 1,
+      caption = paste("SUPPLEMENTAL - same metrics for the",
+                      "structurally incomplete partial-window",
+                      "target months."))
+
+coverage_retention_by_season <- coverage_results %>%
+  group_by(reference_window, candidate, season) %>%
+  summarise(pct_target_days_retained = 100 * mean(target_retained),
+            .groups = "drop") %>%
+  pivot_wider(names_from = season,
+              values_from = pct_target_days_retained)
+kable(coverage_retention_by_season %>%
+        filter(reference_window == "full three-year window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("PRIMARY - percentage of target days retained",
+                      "by season and coverage candidate (full",
+                      "three-year reference windows only; seasonal",
+                      "sampling effect)."))
+kable(coverage_retention_by_season %>%
+        filter(reference_window == "partial window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - percentage of target days",
+                      "retained by season for the structurally",
+                      "incomplete partial-window months."))
+
+coverage_comparison_by_season <- coverage_comparison %>%
+  group_by(reference_window, candidate, season) %>%
+  summarise(n_days_compared = n(),
+            median_abs_pct_diff = median(abs_pct_diff),
+            n_sign_changes = sum(!sign_agrees),
+            .groups = "drop")
+kable(coverage_comparison_by_season %>%
+        filter(reference_window == "full three-year window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("PRIMARY - rank and sign changes vs the",
+                      "any-valid reference, by season and coverage",
+                      "candidate."))
+kable(coverage_comparison_by_season %>%
+        filter(reference_window == "partial window") %>%
+        select(-reference_window),
+      digits = 1,
+      caption = paste("SUPPLEMENTAL - rank and sign changes by",
+                      "season for the partial-window months."))
+```
+
+# Section 8 — Decision summary (recorded 2026-07-19)
+
+The project owner reviewed the accepted full-history version of this
+report and recorded the decision below (gate step 8 in
+`docs/roadmap.md`; the policy is also recorded in
+`docs/methodology.md`). The decision was made by the **project
+owner** — this notebook performed no automatic selection.
+
+- [ ] **Outcome A** — the record treated as sufficiently homogeneous
+  with documented caveats *(not chosen)*.
+- [x] **Outcome B — CHOSEN** — the Earth Engine Sentinel-5P OFFL
+  record is usable for exploratory historical comparison **with
+  explicit restrictions**; it must not be treated as an
+  unconditionally homogeneous 2018–present trend record.
+- [ ] **Outcome C** — official RPRO/Level-2 files outside Earth Engine
+  required *(not chosen; remains a recorded future possibility in
+  `docs/architecture.md` if rigorous trend analysis is ever needed)*.
+
+**Owner decision (recorded 2026-07-19):**
+
+- **Decision:** Outcome B, with the adopted baseline policy below.
+- **Date:** 2026-07-19.
+- **Rationale:** the accepted full-history audit and retrospective
+  baseline-robustness study in this report (Sections 3–7): frequent
+  contributor-scoped processor changes; signature-matched baselines
+  unavailable for most targets (processor-matched: 93.6 % of target
+  days, and completely unavailable for the evaluated 2026 targets);
+  structurally partial early reference windows; and candidate coverage
+  thresholds disproportionately removing winter observations.
+- **Adopted baseline policy:**
+  1. Use the previous three same-calendar years.
+  2. Pool all valid daily BAAQMD regional means from those years.
+  3. Baseline = median of that pooled historical sample.
+  4. Signed anomaly = target daily regional mean − historical median.
+  5. Percentile = percentage of historical values ≤ the target.
+  6. Require all three requested prior years to supply at least one
+     valid same-calendar-month observation before presenting the
+     official anomaly or percentile.
+  7. When the reference window is structurally partial, retain and
+     display the raw daily satellite value and valid-area fraction,
+     but report the baseline/anomaly/percentile as unavailable because
+     the full historical window is not represented.
+  8. Do not require exact processor-version or algorithm-version
+     matching — the retrospective audit showed those variants are
+     unavailable for most targets and completely unavailable for the
+     evaluated 2026 targets.
+  9. Do not calculate processor correction factors.
+  10. Apply no hard valid-area-fraction exclusion to the baseline;
+      retain every valid retrieval and expose the valid-area fraction
+      — the audit showed candidate thresholds disproportionately
+      remove winter observations.
+  11. Continue retaining and flagging days with contributing
+      non-NOMINAL products.
+  12. Disclose processor/algorithm changes and state that the result
+      is an exploratory rolling comparison — not a homogeneous
+      long-term trend, causal processor analysis, surface
+      concentration, AQI, health measure, or final episode
+      classification.
+- **Follow-up actions:** documentation updated the same day
+  (`docs/methodology.md`, `docs/roadmap.md`, `docs/data-sources.md`,
+  `earthengine/README.md`). Exploration script 06 predates policy
+  points 6–7 (it presents baseline statistics from partially
+  represented windows); it is intentionally unchanged, and any
+  user-facing feature presenting official anomalies or percentiles
+  must implement the full-window availability rule. No calculations in
+  this notebook and no Earth Engine export script were modified as
+  part of recording this decision. Episode thresholds, persistence
+  rules, and spatial-extent rules remain undefined and are outside
+  this decision.
+
+# Unresolved limitations
+
+- Satellite tropospheric columns and surface concentrations are
+  different quantities; nothing here validates against surface
+  monitors (gate step 7 remains future work).
+- Regime differences are confounded with season, meteorology, emission
+  trends (including the 2020 pandemic period), and coverage changes;
+  no causal attribution to retrieval processing is possible from this
+  audit alone.
+- The EPSG:3310 / 7000 m statistics configuration is a fixed reference
+  for this audit only — the final analysis scale is undecided.
+- Daily `contributing_*` metadata columns are contributor-scoped by
+  design; the collection-wide metadata record (every
+  footprint-intersecting asset) lives in the product table, and the two
+  timelines are kept separate throughout this notebook.
+- The day-level contributor-regime convention (runs of contributor
+  processor signatures) is a diagnostic construction, not a decided
+  stratification.
+- The export end is conservative: the latest represented local date is
+  excluded because its ingestion may still be partial at export time
+  (both dates are recorded in the manifest). Earlier recent dates may
+  also still receive products under OFFL publication latency; re-run
+  the current-year export to refresh.
+- Retrospective robustness comparisons (Section 7) are conditional on
+  availability: a variant is compared only on days where both it and
+  the prior-three-years reference produce a value, so days lost to
+  mixed or unavailable signatures are absent from the agreement
+  metrics (their frequency is reported separately as unavailability).
+- The full-window / partial-window distinction records structural
+  representation only — whether every requested prior year supplied
+  at least one valid day after the variant's signature or coverage
+  filtering, where applicable. It is not a sample-size adequacy
+  judgment, and the SUPPLEMENTAL partial-window summaries are
+  structurally incomplete — not directly equivalent to the full
+  three-year baseline.
+- Signature matching in Section 7 uses exact raw contributor-scoped
+  metadata strings with no version normalization (script 06's
+  normalization is a display convention of that script). A change in
+  raw formatting alone (e.g., the zero-padded "02.09.01") would
+  register as a signature change; in this export each processor
+  release appears under a single raw spelling.
+- The prior-years-separate decomposition, the merged
+  transition-period windows, and the coverage candidates of Section 7
+  are audit display conventions and sensitivity candidates — none is
+  decided methodology, and no baseline restriction or coverage
+  threshold is selected by this notebook.
+- No persistence rule, spatial-extent rule, or episode label is
+  defined or implied here. The historical-baseline policy and the
+  no-hard-coverage-exclusion rule recorded in Section 8 are project
+  owner decisions (2026-07-19), informed by — but not computed by —
+  this notebook.
+
+# Session info
+
+```{r session-info}
+sessionInfo()
+```

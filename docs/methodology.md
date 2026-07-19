@@ -1,9 +1,13 @@
 # Methodology (planning draft)
 
 This document records the project's working definitions and the planned
-evidence framework. It is a **planning draft**: no thresholds, baselines, or
-detection parameters have been decided yet. Anything undecided is marked TODO
-and will be decided by the project owner, not by coding tools.
+evidence framework. It is a **planning draft** in which decided items are
+explicitly dated — most recently the historical-record homogeneity outcome
+and the historical-baseline policy (2026-07-19). No episode thresholds,
+persistence rules, spatial-extent rules, or final
+episode-classification parameters have been decided. Anything
+undecided is marked TODO and will be decided by the project owner, not by
+coding tools.
 
 Labels used throughout: **Official** = stated by an official source (links
 and access dates in [data-sources.md](data-sources.md)); **Observed** = a
@@ -267,14 +271,19 @@ finalized.
 
 ### Coverage sensitivity
 
-No final minimum-coverage threshold is imposed. **Planned:** compare
-candidate coverage requirements — any valid coverage; at least 20 %; at
-least 40 %; at least 60 % — as **sensitivity-test candidates only, not
-approved thresholds**, measuring the effect of each candidate on:
-retained-day count; seasonal sampling bias; geographic
-representativeness; daily-value stability; baseline construction; and
-anomaly rankings. Low-coverage values may eventually be displayed with a
-quality warning even if excluded from baseline construction.
+No hard minimum-coverage threshold is imposed. The candidate coverage
+requirements — any valid coverage; at least 20 %; at least 40 %; at
+least 60 % — were **sensitivity-test candidates only, never approved
+thresholds**. **Status (2026-07-19):** the candidate comparison was
+performed retrospectively in
+`analysis/s5p_no2_historical_homogeneity.Rmd` (retained-day counts,
+rank and anomaly-sign changes, seasonal sampling effects, source-year
+representation); candidate thresholds disproportionately removed
+winter observations, and the decided historical-baseline policy adopts
+**no hard valid-area-fraction exclusion** — every valid retrieval is
+retained with its valid-area fraction exposed. Low-coverage values may
+still be displayed with a quality warning; that display convention
+remains open.
 
 ## Processor-version and historical-consistency audit
 
@@ -292,16 +301,75 @@ homogeneity guarantee for every later OFFL product, and we do **not**
 claim that Earth Engine already supplies the recommended RPRO/OFFL
 combined record.
 
-**Planned audit tasks:** summarize processor and algorithm versions
-through time; locate version-transition dates; inspect spatial-resolution
-changes; test for discontinuities in the Bay Area series; determine
-whether the Earth Engine collection is sufficiently homogeneous for the
-planned baseline.
+**Status (updated 2026-07-19): audit completed and decision recorded.**
+Exploration script 07
+(`earthengine/exploration/07_s5p_no2_historical_homogeneity_export.js`)
+exported full-history daily audit tables (2018–present), and the
+accepted R report `analysis/s5p_no2_historical_homogeneity.Rmd`
+summarized processor and algorithm versions through time, located
+contributor-scoped version-transition dates, examined coverage,
+missingness, and transition windows, and ran a retrospective
+baseline-robustness study across all eligible target months from 2020
+onward (historical-pool variants, structural window representation, and
+coverage-candidate sensitivity).
 
-**Open — possible responses if the Earth Engine history is not
-homogeneous (none chosen):** restrict the baseline to a homogeneous
-period; model or stratify by processing version; use official RPRO
-Level-2 files outside Earth Engine for rigorous historical analysis.
+**Decision (project owner, 2026-07-19): Outcome B.** The Earth Engine
+Sentinel-5P OFFL record is usable for exploratory historical comparison
+**with explicit restrictions**; it must not be treated as an
+unconditionally homogeneous 2018–present trend record. The adopted
+restrictions are the decided historical-baseline policy in the next
+section. The previously listed alternative responses — restricting the
+baseline to a single homogeneous period, stratifying or modeling by
+processing version, or using official RPRO Level-2 files outside Earth
+Engine — were **not** chosen; the RPRO/Level-2 option remains a
+recorded future possibility (see [architecture.md](architecture.md)) if
+rigorous long-term trend analysis is ever required.
+
+## Decided historical-baseline policy (Outcome B, 2026-07-19)
+
+Recorded by the project owner after reviewing the accepted full-history
+homogeneity report (`analysis/s5p_no2_historical_homogeneity.Rmd`).
+This policy governs how official baseline, anomaly, and percentile
+results are calculated and presented. It defines **no** episode
+thresholds, persistence rules, or spatial-extent rules, and its output
+is an **exploratory rolling comparison** — never a homogeneous
+long-term trend product.
+
+1. Use the previous three same-calendar years.
+2. Pool all valid daily BAAQMD regional means from those years.
+3. Baseline = median of that pooled historical sample.
+4. Signed anomaly = target daily regional mean − historical median.
+5. Percentile = percentage of historical values ≤ the target.
+6. Require all three requested prior years to supply at least one
+   valid same-calendar-month observation before presenting the
+   official anomaly or percentile.
+7. When the reference window is structurally partial, retain and
+   display the raw daily satellite value and valid-area fraction, but
+   report the baseline/anomaly/percentile as unavailable because the
+   full historical window is not represented.
+8. Do not require exact processor-version or algorithm-version
+   matching — the retrospective audit showed those variants are
+   unavailable for most targets and completely unavailable for the
+   evaluated 2026 targets.
+9. Do not calculate processor correction factors.
+10. Apply no hard valid-area-fraction exclusion to the baseline;
+    retain every valid retrieval and expose the valid-area fraction —
+    the audit showed candidate thresholds disproportionately remove
+    winter observations.
+11. Continue retaining and flagging days with contributing non-NOMINAL
+    products.
+12. Disclose processor/algorithm changes and state that the result is
+    an exploratory rolling comparison — not a homogeneous long-term
+    trend, causal processor analysis, surface concentration, AQI,
+    health measure, or final episode classification.
+
+**Implementation status.** Exploration script 06 predates points 6–7:
+it reports unavailable prior years but still presents baseline
+statistics from partially represented windows. Script 06 is
+intentionally unchanged (exploration reference); any user-facing
+feature presenting official anomalies or percentiles must implement
+the full-window availability rule. No calculation or Earth Engine
+export script was modified as part of recording this decision.
 
 ## Exploratory same-calendar-month historical median baseline (script 06)
 
@@ -310,8 +378,10 @@ Level-2 files outside Earth Engine for rigorous historical analysis.
 implements the approved exploratory historical baseline and
 satellite-column anomaly visualization, and its live regression test is
 accepted. Everything in this section is **exploratory** — it is **not**
-a final climatology, and the final baseline definition remains an open
-owner decision (gate steps 9–10 in [roadmap.md](roadmap.md)). All
+a final climatology. **Update (2026-07-19):** the historical-baseline
+policy has since been decided (see the decided policy section above);
+script 06 predates its full-window availability rule (policy points
+6–7) and is intentionally unchanged as an exploration reference. All
 results are Sentinel-5P tropospheric NO₂ **satellite-column** results —
 never AQI, health categories, surface concentrations, source
 attribution, or episode declarations.
@@ -380,8 +450,11 @@ script's panel states this wherever both appear.
 - Mixed processor versions within a baseline sample, and differences
   between the target and baseline version sets, produce **cautions
   only** — nothing is automatically excluded or corrected.
-- Historical homogeneity remains an unresolved audit task (see the
-  processor-version audit above).
+- Historical homogeneity was decided on 2026-07-19 — Outcome B, usable
+  for exploratory historical comparison with explicit restrictions
+  (see the processor-version audit and the decided historical-baseline
+  policy above). Exact version matching is not required, and no
+  correction factors are calculated; version changes are disclosed.
 
 ### Map layers and display stretches (display-only)
 
@@ -468,8 +541,8 @@ visible and explainable in the app:
 
 | Decision | Status |
 | --- | --- |
-| Baseline definition (climatology window, seasonal handling, statistic) | TODO — not decided (script 06's same-calendar-month median is exploratory only, not a final climatology) |
-| "Unusually elevated" criterion (anomaly measure, threshold or percentile) | TODO — not decided |
+| Baseline definition (climatology window, seasonal handling, statistic) | **Decided (2026-07-19)** — same-calendar-month pooled median over the previous three years with the full-window availability rule (see the decided historical-baseline policy); script 06 predates the full-window rule and is unchanged |
+| "Unusually elevated" criterion (anomaly measure, threshold or percentile) | Partially decided — the anomaly measure (signed anomaly vs the historical median) and ≤-percentile are set by the decided baseline policy (2026-07-19); episode-level criteria remain TODO |
 | Persistence criterion (number of days, gap handling) | TODO — not decided |
 | Spatial-extent criterion (area fraction, contiguity) | TODO — not decided |
 | Evidence-agreement rules across sources | TODO — not decided |
@@ -477,12 +550,12 @@ visible and explainable in the app:
 | Validation approach (comparison against known historical events / monitors) | TODO — not decided |
 | Temporal unit: daily compositing rule, same-date combination, missing-day representation | TODO — not decided (see [Temporal unit and daily compositing](#temporal-unit-and-daily-compositing-open)) |
 | Daily contributor definition (valid-pixel products only) and multi-product combination rule | TODO — not decided |
-| Minimum valid daily spatial coverage; daily quality/missingness reporting | TODO — sensitivity candidates only (any/20 %/40 %/60 %), none approved |
+| Minimum valid daily spatial coverage; daily quality/missingness reporting | **Decided (2026-07-19)** — no hard valid-area-fraction exclusion for the baseline; every valid retrieval retained with the fraction exposed (candidates evaluated retrospectively; they disproportionately removed winter observations); low-coverage display warnings remain an open convention |
 | Area-weighted regional statistics | TODO — exploratory implementation completed and live-tested (scripts 04–06, area-weighted means with valid-area fractions); final scientific adoption/validation still open |
 | Final analysis scale; explicit CRS/transform if required | TODO — sensitivity candidates 5.5/7/10 km, none adopted |
 | Regional reducer; pixel weighting, partial/masked pixels, boundary-edge behavior | TODO — an exploratory implementation exists (binary valid-pixel masks, area weighting, EPSG:3310 / 7000 m as exploration settings only); final configuration and validation not decided |
-| Non-nominal product exclusion/flagging rule | TODO — audit first; not decided |
-| Historical homogeneity handling (RPRO/OFFL, processor versions) | TODO — audit first; response not chosen |
+| Non-nominal product exclusion/flagging rule | **Decided (2026-07-19)** — continue retaining and flagging days with contributing non-NOMINAL products (confirms the practical PRODUCT_QUALITY policy) |
+| Historical homogeneity handling (RPRO/OFFL, processor versions) | **Decided (2026-07-19)** — Outcome B: exploratory historical comparison with explicit restrictions; no exact version matching; no correction factors; changes disclosed (see the decided historical-baseline policy) |
 | Validation design (monitors, overpass timing, meteorological context) | TODO — datasets/providers not chosen |
 | Exact Bay Area region definition | **Decided** — official BAAQMD jurisdiction (see [data-sources.md](data-sources.md)) |
 

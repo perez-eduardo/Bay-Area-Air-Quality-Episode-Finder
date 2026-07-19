@@ -338,8 +338,10 @@ Explorer"**). Its live regression test is accepted (2026-07-18). Every
 result is a Sentinel-5P tropospheric NO₂ **satellite-column** result —
 never AQI, health categories, surface concentration, source
 attribution, or an episode declaration. The baseline is exploratory —
-**not** a final climatology; the final baseline definition remains an
-open owner decision (see
+**not** a final climatology. The historical-baseline policy was decided
+on 2026-07-19 (Outcome B — exploratory use with explicit restrictions);
+script 06 predates the policy's full-window availability rule and is
+intentionally unchanged as an exploration reference (see
 [docs/methodology.md](../docs/methodology.md)).
 
 ### Method (accepted exploratory implementation)
@@ -376,8 +378,10 @@ open owner decision (see
 - Processor versions are normalized for display and set comparison
   (e.g. `02.09.01` → `2.9.1`); mixed historical versions and
   target-vs-baseline set differences produce cautions only — nothing is
-  automatically excluded or corrected, and historical homogeneity
-  remains unresolved.
+  automatically excluded or corrected. The historical-record decision
+  was recorded on 2026-07-19 (Outcome B — exploratory use with explicit
+  restrictions; no version matching required, no correction factors;
+  see [docs/methodology.md](../docs/methodology.md)).
 
 ### Map layers (all display-only; never used for statistics)
 

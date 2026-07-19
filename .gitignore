@@ -19,6 +19,11 @@ desktop.ini
 .Rproj.user/
 *.Rproj
 
+# Generated analysis outputs and local data exports (Drive downloads;
+# the .Rmd sources and Earth Engine scripts stay tracked)
+analysis/s5p_no2_historical_homogeneity.html
+data/homogeneity/
+
 # Python (if used for supporting analysis later)
 __pycache__/
 .venv/

@@ -97,9 +97,10 @@ Still open:
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
 - [ ] Remaining gate work (future, non-blocking for the next exploratory
-      feature): the coverage-threshold decision, the final analysis
-      scale, the historical-homogeneity decision, and the R
-      surface-monitor validation workflow (see the gate status below and
+      feature): the final analysis scale and the R surface-monitor
+      validation workflow. The historical-homogeneity decision and the
+      baseline coverage rule were recorded 2026-07-19 — Outcome B and
+      the historical-baseline policy (see the gate status below and
       [methodology.md](methodology.md))
 
 ## Phase 1 — Basic app structure
@@ -143,18 +144,31 @@ reviewable; no threshold or method is adopted in advance (details in
 10. Only after corroboration rules are established may the project
     classify a result as a candidate air-quality episode.
 
-**Gate status (2026-07-18).** Explorations 04 and 05 completed steps 1–6
-sufficiently for the current project stage: the accepted **working**
-daily rule and the practical PRODUCT_QUALITY policy are recorded in
-[methodology.md](methodology.md) and `earthengine/README.md` (practical,
-not scientifically final). Step 7 (the R surface-monitor validation
-workflow), the coverage-threshold decision (beyond the script 05
-sensitivity scenarios), and step 8 (historical homogeneity) remain
-future work but are **not blockers** for the next exploratory feature.
-Steps 9–10 still gate any final baseline method and any episode
-classification. The script 06 exploratory baseline (accepted
-2026-07-18) is exploratory visualization only — it does **not**
-complete steps 8–10, and the final baseline method remains undecided.
+**Gate status (updated 2026-07-19).** Explorations 04 and 05 completed
+steps 1–6 sufficiently for the current project stage: the accepted
+**working** daily rule and the practical PRODUCT_QUALITY policy are
+recorded in [methodology.md](methodology.md) and `earthengine/README.md`
+(practical, not scientifically final). **Step 8 is decided
+(2026-07-19):** exploration script 07
+(`earthengine/exploration/07_s5p_no2_historical_homogeneity_export.js`)
+exported full-history audit tables, the accepted R report
+(`analysis/s5p_no2_historical_homogeneity.Rmd`) ran the metadata,
+coverage, transition, and retrospective baseline-robustness analyses,
+and the owner recorded **Outcome B** — the OFFL record is usable for
+exploratory historical comparison with explicit restrictions, never as
+an unconditionally homogeneous 2018–present trend record. **Step 9's
+baseline and anomaly method is decided** as the historical-baseline
+policy in [methodology.md](methodology.md) (previous three
+same-calendar years, pooled median, signed anomaly, ≤-percentile,
+full-window availability rule, no version matching, no correction
+factors, no hard coverage exclusion). The coverage question for the
+baseline is resolved by that policy (no hard valid-area-fraction
+exclusion). Step 7 (the R surface-monitor validation workflow) remains
+future work — not a blocker. **Step 10 still gates episode
+classification**: no episode thresholds, persistence rules, or
+spatial-extent rules are defined. Script 06 predates the full-window
+availability rule and is intentionally unchanged; implementing the
+decided policy in a user-facing feature is follow-up work.
 
 ### Exploratory baseline and anomaly visualization (completed)
 
@@ -163,23 +177,28 @@ complete steps 8–10, and the final baseline method remains undecided.
       live-tested (regression test accepted 2026-07-18). Still **not**
       Episode Finder classification; no health or AQI interpretation;
       anomalies remain clearly labeled as satellite-column anomalies.
-      The **final** baseline definition is not decided, and the next
-      major project phase is an explicit owner decision that has not
-      been made.
+      The final historical-baseline policy was decided 2026-07-19 (see
+      [methodology.md](methodology.md)); script 06 predates its
+      full-window availability rule and remains an unchanged
+      exploration reference. The next major project phase is still an
+      explicit owner decision that has not been made.
 
 ## Phase 2 — Baseline and anomaly views
 
 **Partially unblocked.** The exploratory historical baseline and
-satellite-column anomaly visualization above is complete (script 06,
-live-tested 2026-07-18); the final baseline definition and the rest of
-this phase still follow the remaining gate steps (see
-[methodology.md](methodology.md)), and no next major phase is chosen
-without an explicit owner decision.
+satellite-column anomaly visualization is complete (script 06,
+live-tested 2026-07-18), and the historical-baseline policy is decided
+(2026-07-19). The remaining items are implementation work that follows
+that policy — and no next major phase is chosen without an explicit
+owner decision.
 
-- [ ] Baseline definition decided and documented in
-      [methodology.md](methodology.md) — the script 06
-      same-calendar-month median is exploratory only, **not** the
-      decided definition
+- [x] Baseline definition decided and documented in
+      [methodology.md](methodology.md) (2026-07-19): same-calendar-month
+      pooled median over the previous three years, signed anomaly,
+      ≤-percentile, full-window availability rule, no
+      processor/algorithm version matching, no correction factors, no
+      hard valid-area-fraction exclusion. Script 06 predates the
+      full-window rule; the final views below must implement it
 - [x] Exploratory baseline-comparison view (target period vs.
       exploratory same-calendar-month historical median — script 06,
       live-tested 2026-07-18)

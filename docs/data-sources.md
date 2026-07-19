@@ -169,9 +169,13 @@ every OFFL product after 26 July 2022 is homogeneous with the RPRO
 record.
 
 **Interpretation.** We do **not** claim that Earth Engine already
-supplies the recommended RPRO/OFFL combined record. Whether the Earth
-Engine history is sufficiently homogeneous for the planned baseline is an
-explicit audit task (see [methodology.md](methodology.md)).
+supplies the recommended RPRO/OFFL combined record. The homogeneity
+audit was completed and the decision recorded on 2026-07-19 —
+**Outcome B**: the Earth Engine OFFL record is usable for exploratory
+historical comparison with explicit restrictions (the decided
+historical-baseline policy) and is never treated as an unconditionally
+homogeneous 2018–present trend record (see
+[methodology.md](methodology.md)).
 
 Other basics (**Official**): the L3 grid is ~1113 m; OFFL NO₂ imagery is
 available from late June 2018 onward.
