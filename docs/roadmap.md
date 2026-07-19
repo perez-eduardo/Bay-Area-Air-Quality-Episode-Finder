@@ -10,8 +10,18 @@ Decided:
 
 - [x] Project concept written (`bay_area_air_quality_episode_finder_overview.md`)
 - [x] Repository structure and planning docs (this phase)
-- [x] Earth Engine app form: JavaScript API, developed and published through
-      the Earth Engine Code Editor
+- [x] Exploration-script form: Earth Engine JavaScript API, developed and
+      run through the Earth Engine Code Editor (scripts 01–06).
+      *Superseded for the public app (2026-07-18):* publishing the
+      public app as an Earth Engine App is no longer the plan (possible
+      fallback only) — see the architecture decision below
+- [x] Public-application architecture decided (2026-07-18): **Railway
+      hosts the complete public application** — browser →
+      Railway-hosted frontend → Railway backend/API → Google Earth
+      Engine → statistics, map layers/tiles, and geospatial results.
+      Earth Engine remains the geospatial processing engine.
+      Implementation has not started (see Phase 5 and
+      [architecture.md](architecture.md))
 - [x] Study region: official BAAQMD jurisdiction (boundary source and interim
       county approximation recorded in [data-sources.md](data-sources.md))
 - [x] First dataset: Sentinel-5P OFFL tropospheric NO₂
@@ -92,9 +102,14 @@ Still open:
       surface-monitor validation workflow (see the gate status below and
       [methodology.md](methodology.md))
 
-## Phase 1 — Basic Earth Engine app structure
+## Phase 1 — Basic app structure
 
-Matches the overview's "initial build direction": structure before modeling.
+Matches the overview's "initial build direction": structure before
+modeling. Under the decided Railway full-application architecture (see
+[architecture.md](architecture.md)), this app structure will ultimately
+be delivered in the Railway-hosted public application; Code Editor
+prototyping may continue to inform it, and the Earth Engine App form is
+a possible fallback only.
 
 - [ ] Bay Area map with the confirmed region boundary
 - [ ] Pollutant / indicator selector (may start with NO₂ only)
@@ -196,10 +211,33 @@ this fuller phase remains for the reproduction and methodology work below.
 - [ ] Comparison against ground-monitor data (access method TODO)
 - [ ] Explanatory charts for the methodology section
 
-## Phase 5 — Publishing
+## Phase 5 — Railway public application and publishing
 
-- [ ] Publish the Earth Engine app
-- [ ] Landing page on Railway with custom domain (Route 53)
+**Architecture decided (2026-07-18), implementation not started.**
+Railway hosts the complete public application: browser → Railway-hosted
+frontend → Railway backend/API → Google Earth Engine → statistics, map
+layers/tiles, and geospatial results. Earth Engine remains the
+geospatial processing engine; the previous plan (a Railway landing page
+linking to a separately published Earth Engine App) is no longer the
+final architecture and remains a possible fallback only (see
+[architecture.md](architecture.md)). None of the items below is
+started, and the stack choices (frontend framework, backend runtime,
+map library, caching design, any database) are open owner decisions.
+
+- [ ] Frontend/backend application structure (stack choices TODO)
+- [ ] Earth Engine service authentication from the backend (public
+      users must not need their own Earth Engine accounts; design TODO)
+- [ ] Backend API endpoints for statistics, map layers/tiles, and
+      geospatial results
+- [ ] Public map/chart UI (loading/error states, charts, legends,
+      responsive layout, branding)
+- [ ] Caching/precomputation evaluation before public exposure —
+      strengthened by script 06's slow dynamically stretched layers;
+      includes the documented option of precomputing expensive
+      daily/baseline products as Earth Engine assets (see
+      [architecture.md](architecture.md))
+- [ ] Deployment on Railway with the custom domain (AWS Route 53)
+- [ ] Public-app testing
 - [ ] Final documentation pass: methodology, limitations, screenshots
 
 ## Later / optional (not commitments)

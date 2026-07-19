@@ -8,6 +8,17 @@ episodes.
 **Decided:** everything here uses the Earth Engine JavaScript API and is
 developed and run through the Earth Engine Code Editor.
 
+**Architecture note (2026-07-18):** the owner has decided that the
+public application will be hosted entirely on Railway — a Railway-hosted
+frontend and a Railway backend/API that calls Google Earth Engine, which
+remains the geospatial processing engine (see
+[docs/architecture.md](../docs/architecture.md)). The scripts in this
+directory remain validated exploration/prototype scripts and scientific
+references; their processing logic may later be reorganized into
+reusable Earth Engine/backend modules. That migration has not been
+implemented, and publishing these scripts as an Earth Engine App is no
+longer the planned final public architecture (a possible fallback only).
+
 ## Contents
 
 - `exploration/01_s5p_no2_exploration.js` — first data-exploration script.
@@ -414,7 +425,9 @@ as universal dataset behavior:
   limitation only; no redesign or optimization is planned now (the
   precomputation posture in
   [docs/architecture.md](../docs/architecture.md) records the future
-  batch-export option).
+  batch-export option). This limitation strengthens the need to
+  evaluate caching and precomputation before the Railway public
+  application exposes this processing.
 
 ## Next milestone
 

@@ -77,6 +77,30 @@ explicit owner decision. Coverage sensitivity and formal
 surface-monitor validation remain future work. No current feature
 detects or classifies episodes.
 
+## Architecture (decided; not yet implemented)
+
+Railway will host the **complete public application** (owner decision,
+2026-07-18):
+
+```text
+Browser
+  → Railway-hosted frontend
+  → Railway backend/API
+  → Google Earth Engine
+  → statistics, map layers/tiles, and geospatial results
+```
+
+Google Earth Engine remains the **geospatial processing engine**
+(ImageCollection filtering, daily compositing, spatial reductions,
+baseline/anomaly image generation); the Railway application provides the
+public UI, backend/API orchestration, and authentication to Earth
+Engine, so public users will not need their own Earth Engine accounts.
+The previous plan — a Railway landing page linking to a separately
+published Earth Engine App — is no longer the planned final architecture
+(it remains a possible fallback). Migration has not been implemented,
+and stack, authentication, and caching choices are open owner decisions
+(see [docs/architecture.md](docs/architecture.md)).
+
 ## Repository layout
 
 ```
@@ -84,11 +108,11 @@ detects or classifies episodes.
 ├── docs/
 │   ├── methodology.md      # Working definitions, evidence framework, open TODOs
 │   ├── data-sources.md     # Candidate data sources (none final yet)
-│   ├── architecture.md     # Planned components and hosting
+│   ├── architecture.md     # Decided architecture (Railway app + Earth Engine)
 │   └── roadmap.md          # Phased development plan
 ├── earthengine/            # Earth Engine scripts (exploration started; app not built)
 ├── analysis/               # R analysis / validation notebooks (not started)
-└── landing-page/           # Custom-domain landing page (not started)
+└── landing-page/           # Railway public application (planned; not started)
 ```
 
 ## Documentation
@@ -98,7 +122,9 @@ detects or classifies episodes.
 - [Methodology](docs/methodology.md) — the working definition of an
   "air-quality episode," the evidence framework, and open methodological TODOs
 - [Data sources](docs/data-sources.md) — candidate datasets under consideration
-- [Architecture](docs/architecture.md) — planned components and hosting
+- [Architecture](docs/architecture.md) — the decided Railway
+  full-application + Earth Engine architecture (implementation not
+  started)
 - [Roadmap](docs/roadmap.md) — development phases
 
 ## Geographic focus
