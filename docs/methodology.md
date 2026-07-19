@@ -171,8 +171,10 @@ plan's product-metadata audit, actual-contribution measurement, quality
 comparison, and initial coverage-sensitivity scenarios; the practical
 PRODUCT_QUALITY policy below was adopted, and further detailed
 product-level investigation is **deferred**. The preprocessing gate is
-sufficiently complete to begin the next exploratory dashboard feature
-(see [roadmap.md](roadmap.md)). Coverage-threshold selection and formal
+sufficiently complete for exploratory dashboard features — the first,
+exploration script 06, is implemented and live-tested (see the
+exploratory baseline section below and [roadmap.md](roadmap.md)).
+Coverage-threshold selection and formal
 surface-monitor validation remain future work — not blockers. Where the
 subsections below say a rule is open, that remains true for the final
 scientific method.
@@ -236,7 +238,9 @@ two identical regional means computed from 90 % and from 15 % of the
 region describe very different amounts of evidence, and baseline or
 anomaly logic that ignores coverage would silently mix them. Area
 weighting is documented as the leading scientifically defensible method
-but is **not** marked validated until implemented and tested.
+and now has a completed, live-tested **exploratory** implementation
+(scripts 04–06, area-weighted regional means with valid-area
+fractions); final scientific adoption and validation remain open.
 
 ### Analysis grid and scale sensitivity
 
@@ -299,6 +303,135 @@ homogeneous (none chosen):** restrict the baseline to a homogeneous
 period; model or stratify by processing version; use official RPRO
 Level-2 files outside Earth Engine for rigorous historical analysis.
 
+## Exploratory same-calendar-month historical median baseline (script 06)
+
+**Status (2026-07-18).** Exploration script 06
+(`earthengine/exploration/06_s5p_no2_monthly_baseline_anomaly.js`)
+implements the approved exploratory historical baseline and
+satellite-column anomaly visualization, and its live regression test is
+accepted. Everything in this section is **exploratory** — it is **not**
+a final climatology, and the final baseline definition remains an open
+owner decision (gate steps 9–10 in [roadmap.md](roadmap.md)). All
+results are Sentinel-5P tropospheric NO₂ **satellite-column** results —
+never AQI, health categories, surface concentrations, source
+attribution, or episode declarations.
+
+### Accepted exploratory method
+
+Built on the accepted working daily rule (Bay Area local calendar
+dates; defensive `PRODUCT_ID` grouping; arithmetic mean of same-date
+orbit products; area-weighted regional means with valid-area fractions
+at EPSG:3310 / 7000 m — exploration settings):
+
+- **Baseline sample.** For each target Bay Area local calendar date,
+  the baseline uses daily images from the **same calendar month** in
+  the previous N years (Historical years control: integer 1–5,
+  default 3). Only years strictly earlier than the target year are
+  used — never the target year and never future dates. Month windows
+  that end on or before the OFFL collection start (late June 2018) are
+  unavailable: they are skipped and reported (requested vs available
+  years), never substituted. A target period crossing a month boundary
+  gets a separate month-matched baseline sample per target month.
+- **Regional historical median.** The baseline sample pools the
+  **non-null historical daily area-weighted regional means**; the
+  regional historical median is the median of that pooled sample.
+- **Signed anomaly** = target daily regional mean − matched regional
+  historical median. A positive anomaly means the satellite-observed
+  tropospheric NO₂ column was above its exploratory
+  same-calendar-month historical median — nothing more.
+- **Percentile rank** = 100 × (count of historical values ≤ the target
+  value) ÷ (count of non-null historical values). The 90th/10th
+  percentile labels are descriptive references only.
+- **No percentage-change metric** is computed. Nulls remain null — a
+  target day without a valid regional value, or without any baseline
+  sample, gets null anomaly and percentile values; nothing is
+  interpolated.
+
+### Two historical summaries — related, not identical
+
+- **Regional historical median** — the median of historical daily
+  BAAQMD regional means (above); used by the charts and all regional
+  anomaly statistics.
+- **Mapped historical median** — the **pixel-wise** median of
+  historical daily images; used only by the map display.
+
+The two are related but **not mathematically identical**, and the
+script's panel states this wherever both appear.
+
+### Quality and coverage handling
+
+- Valid negative retrievals are preserved.
+- No minimum valid-area threshold is adopted. The 0.20 valid-fraction
+  figure inherited from the script 05 sensitivity study is a **caution
+  label only** — nothing is excluded because of it.
+- The valid-area fraction accompanies every target daily statistic.
+- Target-period non-NOMINAL flags are based on **actual BAAQMD
+  contribution** (the fully audited product path).
+- The lightweight historical baseline path does **not** audit
+  contribution-level `PRODUCT_QUALITY`. Historical valid observations
+  are retained, and this limitation is disclosed in the script's panel
+  and Console output.
+
+### Processor-version consistency
+
+- Processor-version strings are normalized for display and set
+  comparison (e.g. `02.09.01` → `2.9.1`); genuine version differences
+  are preserved.
+- Mixed processor versions within a baseline sample, and differences
+  between the target and baseline version sets, produce **cautions
+  only** — nothing is automatically excluded or corrected.
+- Historical homogeneity remains an unresolved audit task (see the
+  processor-version audit above).
+
+### Map layers and display stretches (display-only)
+
+Five map layers, all display-only clipped copies that never feed the
+regional statistics:
+
+1. Target-period mean satellite NO₂ column;
+2. Mapped historical monthly median (pixel-wise);
+3. Mean signed anomaly — fixed comparison scale;
+4. Mean signed anomaly — detail display stretch;
+5. Minimum historical valid-day count.
+
+Display rules, per the analysis/display separation above:
+
+- The detail anomaly limits are symmetric, taken from the larger
+  magnitude of the request-specific 2nd/98th percentiles of the anomaly
+  image over BAAQMD. This is **display-only** — not a threshold, and
+  not comparable across periods; the fixed anomaly scale remains the
+  view for cross-period display comparison.
+- The count layer's stretch spans the observed count range — a
+  visualization change only; the absolute integer counts are unchanged
+  and Inspector-accessible.
+- Display processing never feeds scientific statistics.
+
+### Live-test findings (Observed — one configuration, not universal)
+
+Accepted live regression test, 2026-07-18. These are observed results
+for this region, period, and configuration — they must not be presented
+as universal dataset behavior:
+
+- Default run (local dates 2026-07-03 to 2026-07-10, end exclusive):
+  7 of 7 target days valid.
+- July baseline at the default 3 historical years: 93 valid historical
+  regional days from 2023–2025.
+- A month-crossing request created separate June and July baseline
+  samples.
+- Unavailable prior years were reported without target-year or future
+  substitution.
+- Runs with no available baseline windows retained the target results
+  and returned n/a for baseline-dependent statistics.
+- Target days without valid data were reported.
+- Minimum historical valid-day count: observed range 47–93 days
+  (theoretical maximum 93 for three years).
+- **Performance limitation (nonblocking, exploration stage):** the two
+  dynamically stretched layers — the anomaly detail display stretch and
+  the valid-day count — can render slowly. Recorded as a limitation
+  only; no redesign or optimization is planned now. The precomputation
+  posture in [architecture.md](architecture.md) already records the
+  future batch-export option.
+
 ## Validation phase (before episode classification)
 
 **Planned.** A validation phase precedes historical-baseline and Episode
@@ -335,7 +468,7 @@ visible and explainable in the app:
 
 | Decision | Status |
 | --- | --- |
-| Baseline definition (climatology window, seasonal handling, statistic) | TODO — not decided |
+| Baseline definition (climatology window, seasonal handling, statistic) | TODO — not decided (script 06's same-calendar-month median is exploratory only, not a final climatology) |
 | "Unusually elevated" criterion (anomaly measure, threshold or percentile) | TODO — not decided |
 | Persistence criterion (number of days, gap handling) | TODO — not decided |
 | Spatial-extent criterion (area fraction, contiguity) | TODO — not decided |
@@ -345,9 +478,9 @@ visible and explainable in the app:
 | Temporal unit: daily compositing rule, same-date combination, missing-day representation | TODO — not decided (see [Temporal unit and daily compositing](#temporal-unit-and-daily-compositing-open)) |
 | Daily contributor definition (valid-pixel products only) and multi-product combination rule | TODO — not decided |
 | Minimum valid daily spatial coverage; daily quality/missingness reporting | TODO — sensitivity candidates only (any/20 %/40 %/60 %), none approved |
-| Area-weighted regional statistics | TODO — leading candidate, not implemented or validated |
+| Area-weighted regional statistics | TODO — exploratory implementation completed and live-tested (scripts 04–06, area-weighted means with valid-area fractions); final scientific adoption/validation still open |
 | Final analysis scale; explicit CRS/transform if required | TODO — sensitivity candidates 5.5/7/10 km, none adopted |
-| Regional reducer; pixel weighting, partial/masked pixels, boundary-edge behavior | TODO — not decided |
+| Regional reducer; pixel weighting, partial/masked pixels, boundary-edge behavior | TODO — an exploratory implementation exists (binary valid-pixel masks, area weighting, EPSG:3310 / 7000 m as exploration settings only); final configuration and validation not decided |
 | Non-nominal product exclusion/flagging rule | TODO — audit first; not decided |
 | Historical homogeneity handling (RPRO/OFFL, processor versions) | TODO — audit first; response not chosen |
 | Validation design (monitors, overpass timing, meteorological context) | TODO — datasets/providers not chosen |

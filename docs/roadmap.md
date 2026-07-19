@@ -61,6 +61,26 @@ Decided:
       never silently excluded. No coverage threshold or
       processor-correction method was selected; further detailed
       product-level investigation is deferred.
+- [x] Sixth exploration script — exploratory same-calendar-month
+      historical median baseline and satellite-column anomaly
+      visualization
+      (`earthengine/exploration/06_s5p_no2_monthly_baseline_anomaly.js`),
+      the first script of the approved exploratory baseline/anomaly
+      phase (working description "Satellite NO₂ Column Anomaly
+      Explorer"). Implemented and live-tested (regression test accepted
+      2026-07-18): the default seven-day run had 7 of 7 valid target
+      days; the July baseline pooled 93 valid historical regional days
+      from 2023–2025 at the default 3 historical years; a
+      month-crossing request created separate June and July baseline
+      samples; unavailable prior years were reported without
+      target-year or future substitution; no-baseline runs retained
+      target results with n/a baseline-dependent statistics; missing
+      target days were reported. The dynamically stretched
+      anomaly-detail and valid-day-count layers can render slowly —
+      recorded as a nonblocking exploration-stage performance
+      limitation (no redesign or optimization now). The baseline
+      remains exploratory — **not** a final climatology or baseline
+      definition (method details in [methodology.md](methodology.md)).
 
 Still open:
 
@@ -117,26 +137,44 @@ workflow), the coverage-threshold decision (beyond the script 05
 sensitivity scenarios), and step 8 (historical homogeneity) remain
 future work but are **not blockers** for the next exploratory feature.
 Steps 9–10 still gate any final baseline method and any episode
-classification.
+classification. The script 06 exploratory baseline (accepted
+2026-07-18) is exploratory visualization only — it does **not**
+complete steps 8–10, and the final baseline method remains undecided.
 
-### Next implementation phase (approved, not yet implemented)
+### Exploratory baseline and anomaly visualization (completed)
 
-- [ ] Exploratory historical baseline and **satellite-column anomaly**
-      visualization — still **not** Episode Finder classification; no
-      health or AQI interpretation; candidate anomalies must remain
-      clearly labeled as satellite-column anomalies.
+- [x] Exploratory historical baseline and **satellite-column anomaly**
+      visualization — implemented as exploration script 06 and
+      live-tested (regression test accepted 2026-07-18). Still **not**
+      Episode Finder classification; no health or AQI interpretation;
+      anomalies remain clearly labeled as satellite-column anomalies.
+      The **final** baseline definition is not decided, and the next
+      major project phase is an explicit owner decision that has not
+      been made.
 
 ## Phase 2 — Baseline and anomaly views
 
 **Partially unblocked.** The exploratory historical baseline and
-satellite-column anomaly visualization above is approved; the final
-baseline definition and the rest of this phase still follow the
-remaining gate steps (see [methodology.md](methodology.md)).
+satellite-column anomaly visualization above is complete (script 06,
+live-tested 2026-07-18); the final baseline definition and the rest of
+this phase still follow the remaining gate steps (see
+[methodology.md](methodology.md)), and no next major phase is chosen
+without an explicit owner decision.
 
 - [ ] Baseline definition decided and documented in
-      [methodology.md](methodology.md)
-- [ ] Baseline-comparison view (selected period vs. baseline)
-- [ ] Anomaly map layer
+      [methodology.md](methodology.md) — the script 06
+      same-calendar-month median is exploratory only, **not** the
+      decided definition
+- [x] Exploratory baseline-comparison view (target period vs.
+      exploratory same-calendar-month historical median — script 06,
+      live-tested 2026-07-18)
+- [ ] Final baseline-comparison view (selected period vs. the decided
+      baseline) — follows the baseline definition above
+- [x] Exploratory anomaly map layers (fixed comparison scale and detail
+      display stretch — script 06)
+- [ ] Final anomaly map layer (based on the decided baseline method)
+- [x] Limitation notes visible in the exploratory views (script 06
+      panel and Console)
 - [ ] Limitation notes updated for the chosen baseline approach
 
 ## Phase 3 — Episode detection

@@ -8,15 +8,17 @@ reasoning behind any interpretation of them. **Episode detection** — scanning 
 data for periods that look unusually poor, persistent, and widespread — is one
 planned feature of the dashboard, not the only one.
 
-> **Status: preprocessing explorations complete; dashboard features next.**
-> The dashboard app is not built yet. Five Earth Engine exploration
+> **Status: exploratory baseline and anomaly visualization complete;
+> dashboard app not built.**
+> The dashboard app is not built yet. Six Earth Engine exploration
 > scripts exist (see `earthengine/`); the preprocessing investigation is
 > closed with an accepted **working** daily rule (practical, not final),
-> and the next planned feature is an exploratory historical baseline and
-> **satellite-column anomaly** visualization — still not episode
-> classification, with no health or AQI interpretation (see
-> [docs/roadmap.md](docs/roadmap.md)). No current feature detects
-> episodes.
+> and the approved exploratory historical baseline and
+> **satellite-column anomaly** visualization is implemented and
+> live-tested (script 06) — still not episode classification, with no
+> health or AQI interpretation (see
+> [docs/roadmap.md](docs/roadmap.md)). No current feature detects or
+> classifies episodes.
 
 ## What this project is
 
@@ -44,7 +46,7 @@ documents its assumptions and uncertainty.
 | Feature | Status |
 | --- | --- |
 | Bay Area map with air-quality-related layers | Exploration started (see `earthengine/`) |
-| Time-series charts vs. a baseline | Planned |
+| Time-series charts vs. a baseline | Exploration started (script 06 exploratory baseline; final baseline method undecided) |
 | Evidence panel (persistence, spatial extent, source agreement) | Planned |
 | Episode detection (scan for candidate episode periods) | Planned — paused pending the validation gate (see roadmap) |
 | Methodology / "under the hood" section in the app | Planned |
@@ -62,15 +64,18 @@ as a **working rule** (practical, not final; satellite NO₂ remains a
 column-density evidence layer, never AQI, surface concentration, or an
 episode declaration). The initial Sentinel-5P analytical feature
 carries the cautious working description **"Satellite NO₂ Column Anomaly
-Explorer"**; the broader "candidate air-quality episode" label will
-require corroborating evidence later (ground monitors, persistence,
-coverage, meteorological context), and neither the repository nor the
-final product is renamed without an explicit owner decision. The
-preprocessing gate in [docs/roadmap.md](docs/roadmap.md) is sufficiently
-complete for the next exploratory feature; coverage sensitivity and
-formal surface-monitor validation remain future work (details in
-[docs/methodology.md](docs/methodology.md)). No current feature detects
-episodes.
+Explorer"** and is implemented as exploration script 06 (live regression
+test accepted 2026-07-18): an exploratory **same-calendar-month
+historical median baseline** with signed satellite-column anomalies and
+descriptive percentile references — exploratory only, **not** a final
+climatology or baseline definition (method details in
+[docs/methodology.md](docs/methodology.md)). The broader "candidate
+air-quality episode" label will require corroborating evidence later
+(ground monitors, persistence, coverage, meteorological context), and
+neither the repository nor the final product is renamed without an
+explicit owner decision. Coverage sensitivity and formal
+surface-monitor validation remain future work. No current feature
+detects or classifies episodes.
 
 ## Repository layout
 

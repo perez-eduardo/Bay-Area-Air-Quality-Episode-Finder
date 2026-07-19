@@ -1,7 +1,9 @@
 # Earth Engine scripts
 
-**Status: data exploration started.** The dashboard app itself is not built
-yet.
+**Status: data exploration in progress — six exploration scripts exist
+(01–06); script 06 is implemented and live-tested.** The dashboard app
+itself is not built yet, and no script detects or classifies air-quality
+episodes.
 
 **Decided:** everything here uses the Earth Engine JavaScript API and is
 developed and run through the Earth Engine Code Editor.
@@ -51,6 +53,15 @@ developed and run through the Earth Engine Code Editor.
   anchored to the latest local date available in the OFFL collection.
   **Exploration only** — no baselines, anomalies, episode detection,
   thresholds, scoring, or modeling.
+- `exploration/06_s5p_no2_monthly_baseline_anomaly.js` — sixth
+  data-exploration script (**implemented and live-tested**):
+  exploratory same-calendar-month historical median baseline and
+  satellite-column anomaly visualization (working description
+  "Satellite NO₂ Column Anomaly Explorer" — see
+  [Exploratory baseline and anomaly (exploration 06)](#exploratory-baseline-and-anomaly-exploration-06)
+  below). **Exploration only** — the baseline is not a final
+  climatology; no episode detection, health or AQI interpretation,
+  thresholds, scoring, or modeling.
 
 ## Running a script in the Code Editor
 
@@ -62,7 +73,9 @@ developed and run through the Earth Engine Code Editor.
    controls, a data-availability note, and the time-series chart. Script 02
    additionally shows a display-mode selector and a mode-specific legend;
    scripts 03 and 04 show layer selectors, coverage summaries, and
-   comparison charts.
+   comparison charts; script 06 shows a historical-years control, a
+   five-layer map selector, baseline-sample summaries, and anomaly
+   charts.
 4. Change the date range in the panel's date boxes and click **Update** — or
    edit the `CONFIG` block at the top of the script and re-run.
 
@@ -305,15 +318,114 @@ Coverage-threshold sensitivity follow-up and formal surface-monitor
 validation remain future work — not blockers for the next exploratory
 feature.
 
+## Exploratory baseline and anomaly (exploration 06)
+
+`exploration/06_s5p_no2_monthly_baseline_anomaly.js` is the first script
+of the approved exploratory historical baseline and satellite-column
+anomaly phase (working description: **"Satellite NO₂ Column Anomaly
+Explorer"**). Its live regression test is accepted (2026-07-18). Every
+result is a Sentinel-5P tropospheric NO₂ **satellite-column** result —
+never AQI, health categories, surface concentration, source
+attribution, or an episode declaration. The baseline is exploratory —
+**not** a final climatology; the final baseline definition remains an
+open owner decision (see
+[docs/methodology.md](../docs/methodology.md)).
+
+### Method (accepted exploratory implementation)
+
+- For every target Bay Area local calendar date, the baseline uses
+  daily images from the **same calendar month** in the previous N years
+  (Historical years control: integer 1–5, default 3) — only years
+  earlier than the target year; never the target year and never future
+  dates. Month windows ending on or before the OFFL collection start
+  (late June 2018) are skipped and reported, never substituted. A
+  month-crossing target period gets a separate baseline sample per
+  target month.
+- The **regional historical median** is the median of the pooled
+  non-null historical daily area-weighted BAAQMD regional means; it
+  feeds the charts and the anomaly and percentile numbers.
+- Signed anomaly = target daily regional mean − matched regional
+  historical median. Percentile rank = 100 × (count of historical
+  values ≤ the target value) ÷ (count of non-null historical values),
+  with the 10th/90th percentiles as descriptive references only. No
+  percentage-change metric is computed; nulls stay null; nothing is
+  interpolated.
+- The **mapped historical median** (pixel-wise median of historical
+  daily images) exists only for the map display. The regional and
+  mapped medians are related but **not mathematically identical**; the
+  panel states this.
+- Quality and coverage: valid negative retrievals are preserved; no
+  minimum valid-area threshold is adopted (the 0.20 figure is a caution
+  label inherited from the script 05 sensitivity study); the valid-area
+  fraction accompanies every target daily statistic; target non-NOMINAL
+  flags are based on actual BAAQMD contribution, while the lightweight
+  historical baseline path does **not** audit contribution-level
+  `PRODUCT_QUALITY` — historical valid observations are retained and
+  this limitation is disclosed in the panel and Console.
+- Processor versions are normalized for display and set comparison
+  (e.g. `02.09.01` → `2.9.1`); mixed historical versions and
+  target-vs-baseline set differences produce cautions only — nothing is
+  automatically excluded or corrected, and historical homogeneity
+  remains unresolved.
+
+### Map layers (all display-only; never used for statistics)
+
+1. **Target-period mean satellite NO₂ column** — the fixed
+   scripts 03–05 display stretch.
+2. **Mapped historical monthly median (pixel-wise)** — the same fixed
+   stretch.
+3. **Mean signed anomaly — fixed comparison scale** — a symmetric
+   diverging stretch, identical for every period; use this view for
+   cross-period display comparison.
+4. **Mean signed anomaly — detail display stretch** — symmetric limits
+   from the larger magnitude of the request-specific 2nd/98th anomaly
+   percentiles over BAAQMD. Display-only, not a threshold, and **not
+   comparable across periods**.
+5. **Minimum historical valid-day count** — data availability, not
+   pollution and not NO₂ magnitude. The stretch spans the observed
+   count range (a visualization change only); the absolute integer
+   counts are unchanged and Inspector-accessible.
+
+Display processing never feeds the scientific statistics (see
+[docs/methodology.md](../docs/methodology.md)).
+
+### Live-test findings (observed; not universal dataset behavior)
+
+From the accepted 2026-07-18 live regression test — observed results
+for this region, period, and configuration; they must not be presented
+as universal dataset behavior:
+
+- Default run (local dates 2026-07-03 to 2026-07-10, end exclusive):
+  7 of 7 target days valid.
+- July baseline at the default 3 historical years: 93 valid historical
+  regional days from 2023–2025.
+- A month-crossing request created separate June and July baseline
+  samples.
+- Unavailable prior years were reported without target-year or future
+  substitution.
+- No-baseline runs retained the target results and returned n/a for
+  baseline-dependent statistics; target days without valid data were
+  reported.
+- Minimum historical valid-day count: observed range 47–93 days
+  (theoretical maximum 93 for three years).
+- **Performance (nonblocking limitation):** the two dynamically
+  stretched layers — the anomaly detail display stretch and the
+  valid-day count — can render slowly. Recorded as an exploration-stage
+  limitation only; no redesign or optimization is planned now (the
+  precomputation posture in
+  [docs/architecture.md](../docs/architecture.md) records the future
+  batch-export option).
+
 ## Next milestone
 
-The preprocessing gate is sufficiently complete to begin the next
-dashboard feature: **exploratory historical baseline and
-satellite-column anomaly visualization** — still **not** Episode Finder
-classification, with no health or AQI interpretation, and candidate
-anomalies clearly labeled as **satellite-column anomalies** (see
-[docs/roadmap.md](../docs/roadmap.md)). Not yet implemented.
+The **exploratory historical baseline and satellite-column anomaly
+visualization** is implemented and live-tested (exploration 06 above) —
+still **not** Episode Finder classification, with no health or AQI
+interpretation, and anomalies clearly labeled as **satellite-column
+anomalies** (see [docs/roadmap.md](../docs/roadmap.md)).
 
-The Phase 1 app structure in [docs/roadmap.md](../docs/roadmap.md) — map,
-indicator selector, time series, placeholder episode summary, and visible
-methodology/limitations notes — remains the next app-structure milestone.
+The next major project phase is an explicit owner decision and has not
+been chosen. The Phase 1 app structure in
+[docs/roadmap.md](../docs/roadmap.md) — map, indicator selector, time
+series, placeholder episode summary, and visible methodology/limitations
+notes — remains the next app-structure milestone.
