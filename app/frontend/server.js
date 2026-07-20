@@ -50,7 +50,10 @@ var MIME = {
 function resolveFile(urlPath) {
   var clean = decodeURIComponent(urlPath.split('?')[0]);
   if (clean === '/' || clean === '') clean = '/index.html';
-  if (clean === '/about') clean = '/about.html'; // extensionless alias
+  // The About panel is a dialog on the main page: both /about and the
+  // legacy /about.html serve the application shell, and the client
+  // opens the dialog when it sees those paths.
+  if (clean === '/about' || clean === '/about.html') clean = '/index.html';
   var target = path.join(CONFIG.root, path.normalize(clean));
   var rootWithSep = CONFIG.root + path.sep;
   if (target !== CONFIG.root && target.indexOf(rootWithSep) !== 0) {

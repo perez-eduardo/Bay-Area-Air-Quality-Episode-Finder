@@ -53,9 +53,10 @@ body {
 .skip {
   position: absolute; left: -9999px; top: 0;
   background: var(--primary-darkest); color: var(--white);
-  padding: 10px 16px; z-index: 1000;
+  padding: 10px 16px; z-index: 1300;
 }
 .skip:focus { left: 0; }
+
 
 /* --------------------------------------------------- provenance strip
    Federal sites open with an "official website" banner. This project is
@@ -71,18 +72,11 @@ body {
 .masthead .wrap { padding-top: 30px; padding-bottom: 30px; }
 .mast-flex { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 
-/* Discreet logo-only developer mark (links to /about.html): ~40x40 px
-   touch target, keyboard focusable, no imagery. */
-.ep-mark {
-  flex: none; width: 40px; height: 40px;
-  display: flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  color: var(--white); background: transparent;
-  font-family: var(--mono); font-size: 13.5px; letter-spacing: .08em;
-  text-decoration: none;
-}
-.ep-mark:hover { background: rgba(255, 255, 255, 0.14); }
-.ep-mark:focus-visible { outline: 3px solid var(--white); outline-offset: 2px; }
+/* Discreet plain text link to the About dialog: a normal link, not a
+   button, badge, or logo. */
+.about-link { flex: none; color: #cddcf0; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; padding: 8px 2px; }
+.about-link:hover { color: var(--white); }
+.about-link:focus-visible { outline: 3px solid var(--white); outline-offset: 2px; }
 .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: #9fc0e8; margin: 0 0 12px; }
 h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; letter-spacing: -.021em; line-height: 1.08; margin: 0 0 12px; max-width: 24ch; }
 .standfirst { font-size: 16.5px; font-weight: 300; color: #cddcf0; max-width: 64ch; margin: 0; }
@@ -239,28 +233,23 @@ footer a { color: var(--white); text-decoration: underline; text-underline-offse
 footer a:hover { color: #9fc0e8; }
 footer .attrib { font-family: var(--mono); font-size: 12px; }
 
-/* --------------------------------------------------- about page (/about.html) */
-/* One narrow aligned column: masthead, body, and footer share the
-   same 780px measure on the about page. */
-.about-masthead .wrap { max-width: 780px; }
-.about-main .wrap { max-width: 780px; padding-top: 26px; padding-bottom: 46px; }
-.back-link {
-  display: inline-flex; align-items: center; gap: 7px;
-  color: var(--primary-darker); font-size: 14px; font-weight: 600;
-  text-decoration: none;
-}
-.back-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.back-link:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
-.back-link svg { flex: none; }
-.about-context { font-size: 16px; color: var(--gray-dark); max-width: 62ch; margin: 24px 0 30px; line-height: 1.6; }
-.about-main h2 { font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase; color: var(--primary-darker); margin: 0 0 4px; padding-bottom: 8px; border-bottom: var(--edge); }
-.contact-list { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.contact-list li { display: flex; align-items: center; gap: 11px; font-size: 15px; color: var(--gray-dark); }
-.contact-list svg { flex: none; color: var(--primary-darker); }
+/* ------------------------------------------------------ about dialog */
+#aboutDialog { width: min(620px, calc(100vw - 32px)); border: 1px solid var(--gray-lighter); padding: 0; overflow: hidden; }
+#aboutDialog::backdrop { background: rgba(6, 31, 74, 0.55); }
+.dlg-inner { padding: 18px 26px 24px; max-height: min(85vh, 640px); overflow-y: auto; }
+.dlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.dlg-head h2 { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -.015em; margin: 6px 0 12px; }
+.dlg-close { flex: none; width: 40px; height: 40px; margin: -4px -12px 0 0; background: none; border: 0; font-size: 24px; line-height: 1; color: var(--gray-dark); cursor: pointer; }
+.dlg-close:hover { color: var(--base); background: var(--gray-lightest); }
+.dlg-close:focus-visible { outline: 3px solid var(--primary); outline-offset: 0; }
+.dlg-text { font-size: 15px; color: var(--gray-dark); line-height: 1.6; margin: 0 0 18px; }
+.contact-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.contact-list li { font-size: 15px; color: var(--gray-dark); }
 .contact-list a { color: var(--primary-darker); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .contact-list a:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
-.about-footer { flex-direction: column; gap: 9px; font-size: 13px; max-width: 780px; }
-.about-footer .fine { color: #9fc0e8; }
+.dlg-foot { margin-top: 20px; padding-top: 13px; border-top: var(--edge); font-size: 12.5px; color: var(--gray); }
+.dlg-foot p { margin: 0 0 6px; }
+.dlg-foot p:last-child { margin-bottom: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

@@ -116,6 +116,9 @@
     dateInput: el('analysisDate'),
     loadButton: el('loadButton'),
     loadButtonText: el('loadButtonText'),
+    aboutLink: el('aboutLink'),
+    aboutDialog: el('aboutDialog'),
+    aboutClose: el('aboutClose'),
     statusLive: el('statusLive'),
     retryContext: el('retryContext'),
     retryBoundary: el('retryBoundary'),
@@ -501,15 +504,22 @@
         a === 'timeout' || a === 'unreachable' || a === 'error');
   }
 
+  // Status lines are shown only for active or exceptional states: a
+  // successful steady state returns '' and the element is hidden, so
+  // no permanent success messages accumulate around the map.
   function renderMapStates() {
-    setText(nodes.mapState, boundaryStateText());
-    setText(nodes.satLayer, anomalyStateText());
+    var boundaryText = boundaryStateText();
+    setText(nodes.mapState, boundaryText);
+    if (nodes.mapState) nodes.mapState.hidden = !boundaryText;
+    var anomalyText = anomalyStateText();
+    setText(nodes.satLayer, anomalyText);
+    if (nodes.satLayer) nodes.satLayer.hidden = !anomalyText;
   }
 
   function boundaryStateText() {
     var ctx = state.context.status;
     if (ctx === 'loading') {
-      return 'Basemap only — waiting for the backend.';
+      return 'Basemap only, waiting for the backend.';
     }
     if (ctx !== 'ready' && ctx !== 'ee_not_ready') {
       return 'Basemap only. The backend could not be reached, so the ' +
@@ -519,18 +529,17 @@
       case 'loading':
         return 'Loading the official BAAQMD boundary…';
       case 'ready':
-        return 'Official BAAQMD jurisdiction boundary drawn from the ' +
-            'backend asset.';
+        return ''; // steady success: no permanent status message
       case 'timeout':
-        return 'Boundary unavailable — the boundary request timed ' +
+        return 'Boundary unavailable: the boundary request timed ' +
             'out. No approximate boundary is substituted.';
       case 'unavailable':
-        return 'Boundary unavailable — ' +
+        return 'Boundary unavailable: ' +
             (state.boundary.message || 'the backend could not supply ' +
                 'the official boundary') +
             '. No approximate boundary is substituted.';
       default:
-        return 'Basemap only — boundary not requested yet.';
+        return 'Basemap only. Boundary not requested yet.';
     }
   }
 
@@ -543,58 +552,54 @@
       return 'Anomaly layer: waiting for the first analysis.';
     }
     if (a.status === 'loading') {
-      return 'Anomaly layer: loading analysis for ' +
-          a.requestedDate + '…';
+      // The animated Load button and the live status region already
+      // announce the active analysis; no duplicate message here.
+      return '';
     }
     if (a.status !== 'ready') {
-      return 'Anomaly layer removed — ' + analysisStateText() + '';
+      return 'Anomaly layer removed: ' + analysisStateText();
     }
     var map = a.data.map;
     switch (map.status) {
       case 'available':
         // Truthful lifecycle: a tile URL attached to Leaflet is not a
-        // displayed layer. The wording follows real tile events.
+        // displayed layer. The wording follows real tile events, and
+        // a fully rendered layer needs no permanent success message.
         switch (tileState.status) {
           case 'rendering':
-            return 'Rendering anomaly tiles… First Earth Engine tile ' +
-                'rendering can take tens of seconds.';
+            return 'Rendering map… First tile rendering can take ' +
+                'tens of seconds.';
           case 'displayed':
-            return 'Anomaly layer displayed. Local date ' +
-                map.localDate + '; unit ' + map.unit + '. Per-date ' +
-                'display stretch — colour intensity is not ' +
-                'comparable across dates.';
+            return ''; // steady success: the map speaks for itself
           case 'partial':
-            return 'Anomaly layer partially rendered — ' +
-                tileState.errored + ' tile request(s) failed; ' +
-                'successfully rendered tiles remain visible. Local ' +
-                'date ' + map.localDate + '; unit ' + map.unit +
-                '. Per-date display stretch — colour intensity is ' +
-                'not comparable across dates.';
+            return 'Anomaly layer partially rendered: ' +
+                tileState.errored + ' tile request(s) failed. ' +
+                'Successfully rendered tiles remain visible.';
           case 'failed':
-            return 'Anomaly tile rendering failed — the tile service ' +
+            return 'Anomaly tile rendering failed: the tile service ' +
                 'returned errors before any tile rendered. The ' +
-                'observation and baseline values above stand.';
+                'observation and baseline values stand.';
           default:
             return 'Anomaly layer state: ' + tileState.status + '.';
         }
       case 'baseline_unavailable':
-        return 'Anomaly map unavailable — complete three-year ' +
+        return 'Anomaly map unavailable: a complete three-year ' +
             'historical baseline is not available for this date.';
       case 'no_products':
-        return 'Anomaly map unavailable — no source products were ' +
+        return 'Anomaly map unavailable: no source products were ' +
             'acquired for this date.';
       case 'no_valid_retrieval':
-        return 'Anomaly map unavailable — products exist for this ' +
+        return 'Anomaly map unavailable: products exist for this ' +
             'date but none produced a valid retrieval.';
       case 'projection_incompatible':
-        return 'Anomaly map unavailable — this date’s source ' +
+        return 'Anomaly map unavailable: this date’s source ' +
             'grid is incompatible with the canonical lattice.';
       case 'visualization_unavailable':
-        return 'Anomaly map unavailable — valid visualization bounds ' +
+        return 'Anomaly map unavailable: valid visualization bounds ' +
             'could not be calculated for this date.';
       case 'upstream_error':
-        return 'Anomaly map unavailable — the tile request failed. ' +
-            'The observation and baseline values above it stand.';
+        return 'Anomaly map unavailable: the tile request failed. ' +
+            'The observation and baseline values stand.';
       default:
         return 'Anomaly map unavailable (' + map.status + ').';
     }
@@ -668,7 +673,7 @@
     if (gradient === null) {
       var unavailable = document.createElement('span');
       unavailable.className = 'bmeta';
-      unavailable.textContent = 'Anomaly legend unavailable — the ' +
+      unavailable.textContent = 'Anomaly legend unavailable: the ' +
           'backend palette metadata could not be interpreted. No ' +
           'replacement palette is invented; map tiles are unaffected.';
       legend.appendChild(unavailable);
@@ -676,7 +681,7 @@
     }
     var title = document.createElement('span');
     title.className = 'bmeta';
-    title.textContent = 'Signed column anomaly (' + map.unit + ') — ' +
+    title.textContent = 'Signed column anomaly (' + map.unit + '), ' +
         map.localDate;
     legend.appendChild(title);
 
@@ -754,7 +759,7 @@
       case 'no_valid_retrieval':
         return 'products exist, no valid retrieval';
       case 'projection_incompatible':
-        return 'source grid incompatible — value withheld by design';
+        return 'source grid incompatible, value withheld by design';
       default: return 'unavailable';
     }
   }
@@ -773,8 +778,10 @@
   function renderReadouts() {
     var a = state.analysis;
     if (a.status !== 'ready') {
-      setText(nodes.readoutState, analysisStateText() ||
-          'Waiting for the first analysis');
+      // While loading, the animated button and the live status region
+      // already say so; only exceptional states get a line here.
+      setText(nodes.readoutState, a.status === 'loading' ? '' :
+          (analysisStateText() || 'Waiting for the first analysis'));
       setReadout(nodes.roMean, nodes.roMeanUnit, null, '');
       setReadout(nodes.roAnom, nodes.roAnomUnit, null, '');
       setReadout(nodes.roPct, nodes.roPctUnit, null, '');
@@ -785,9 +792,18 @@
     var obs = data.observation;
     var base = data.baseline;
 
-    setText(nodes.readoutState, 'Local date ' + data.localDate +
-        ' — observation: ' + obs.status.replace(/_/g, ' ') +
-        '; baseline: ' + base.status.replace(/_/g, ' '));
+    // Plain availability is the normal state and gets no permanent
+    // banner; only exceptional scientific statuses are called out.
+    var exceptional = [];
+    if (obs.status !== 'available') {
+      exceptional.push('observation: ' + obs.status.replace(/_/g, ' '));
+    }
+    if (base.status !== 'available') {
+      exceptional.push('baseline: ' + base.status.replace(/_/g, ' '));
+    }
+    setText(nodes.readoutState, exceptional.length ?
+        'Local date ' + data.localDate + ', ' +
+            exceptional.join('; ') : '');
 
     var mean = fmtSci(obs.regionalMeanNo2);
     setReadout(nodes.roMean, nodes.roMeanUnit, mean,
@@ -878,9 +894,8 @@
       items.push('Unknown product quality: ' +
           data.observation.unknownProductQualityCount +
           ' contributing product(s) carry no PRODUCT_QUALITY ' +
-          'metadata. Unknown quality is reported as unknown — it is ' +
-          'not counted as non-NOMINAL — and the products are ' +
-          'retained.');
+          'metadata. Unknown quality is reported as unknown, not as ' +
+          'non-NOMINAL, and the products are retained.');
     }
     if (data.observation.projectionCompatibilityStatus ===
         'incompatible') {
@@ -898,7 +913,7 @@
           '(contributing years: ' +
           (joinYears(data.baseline.contributingPriorYears) || 'none') +
           '). The daily value and coverage remain; the historical ' +
-          'median, anomaly, and percentile are unavailable — not zero.');
+          'median, anomaly, and percentile are unavailable, not zero.');
     }
     if (data.map.warning) {
       items.push('Map: ' + data.map.warning);
@@ -1006,7 +1021,9 @@
               result.body.ok && result.body.geojson) {
             setBoundaryLayer(result.body.geojson);
             state.boundary = {status: 'ready', message: null};
-            setStatusMessage('Official boundary loaded.');
+            // Steady success needs no status message, and staying
+            // silent here never overwrites an active analysis
+            // loading announcement.
           } else {
             state.boundary = {status: 'unavailable',
                 message: errorMessageFrom(result, 'the backend ' +
@@ -1092,7 +1109,7 @@
         // Any unavailable state removes stale tiles immediately.
         removeAnomalyLayer();
       }
-      setStatusMessage('Analysis loaded for ' + body.localDate + '.');
+      setStatusMessage(''); // success: values and map speak for themselves
       return;
     }
 
@@ -1113,6 +1130,100 @@
     };
     setStatusMessage('Analysis for ' + dateStr + ' unavailable: ' +
         analysisStateText());
+  }
+
+  /* ----------------------------------------------------- ABOUT DIALOG */
+
+  /*
+   * The About panel is a native <dialog> on the main page, deep-linked
+   * at /about (the static server serves the application shell for
+   * /about and the legacy /about.html). History integration:
+   *   - clicking About opens the modal and pushes /about;
+   *   - closing it (X, Escape, backdrop) returns the URL to /;
+   *   - browser Back from /about closes it, Forward reopens it.
+   * Native showModal() provides the modal behavior and focus
+   * containment; no hand-written focus trap exists. On close, focus
+   * returns to the About link. Without JavaScript the link simply
+   * navigates to /about (which serves the application; the dialog
+   * content itself needs JavaScript, a disclosed limitation).
+   */
+  var pushedAbout = false;            // we created the /about entry
+  var suppressHistoryOnClose = false; // closing because of Back/Forward
+
+  function aboutSupported() {
+    return !!(nodes.aboutDialog &&
+        typeof nodes.aboutDialog.showModal === 'function');
+  }
+
+  function atAboutPath() {
+    return window.location && (window.location.pathname === '/about' ||
+        window.location.pathname === '/about.html');
+  }
+
+  function openAbout(fromHistory) {
+    if (!aboutSupported()) return;
+    if (!nodes.aboutDialog.open) {
+      nodes.aboutDialog.showModal(); // focuses the close control
+    }
+    if (!fromHistory && window.history && window.history.pushState &&
+        !atAboutPath()) {
+      window.history.pushState({about: true}, '', '/about');
+      pushedAbout = true;
+    }
+  }
+
+  function onAboutClosed() {
+    var suppressed = suppressHistoryOnClose;
+    suppressHistoryOnClose = false;
+    if (!suppressed && window.history) {
+      if (pushedAbout && window.history.back) {
+        // We pushed the /about entry: step back to the / entry (the
+        // resulting popstate finds the dialog already closed).
+        pushedAbout = false;
+        window.history.back();
+      } else if (atAboutPath() && window.history.replaceState) {
+        // Deep link or Forward entry: rewrite in place, no reload.
+        window.history.replaceState({}, '', '/');
+      }
+    }
+    if (nodes.aboutLink && nodes.aboutLink.focus) nodes.aboutLink.focus();
+  }
+
+  // Opens or closes the dialog to match the current location; used at
+  // page initialization and on every popstate (Back/Forward).
+  function syncAboutFromLocation() {
+    if (!aboutSupported()) return;
+    if (atAboutPath()) {
+      openAbout(true);
+    } else if (nodes.aboutDialog.open) {
+      suppressHistoryOnClose = true;
+      nodes.aboutDialog.close();
+    }
+  }
+
+  function wireAbout() {
+    if (!aboutSupported()) return; // real link navigation still works
+    nodes.aboutLink.addEventListener('click', function (event) {
+      event.preventDefault();
+      openAbout(false);
+    });
+    nodes.aboutClose.addEventListener('click', function () {
+      nodes.aboutDialog.close();
+    });
+    // Every close path (X, native Escape, backdrop) funnels through
+    // the close event: fix the URL once and restore focus once.
+    nodes.aboutDialog.addEventListener('close', onAboutClosed);
+    // Backdrop clicks target the dialog element itself; clicks inside
+    // the panel target .dlg-inner or its children and never close.
+    nodes.aboutDialog.addEventListener('click', function (event) {
+      if (event.target === nodes.aboutDialog) nodes.aboutDialog.close();
+    });
+    if (window.addEventListener) {
+      window.addEventListener('popstate', function () {
+        pushedAbout = false;
+        syncAboutFromLocation();
+      });
+    }
   }
 
   /* ------------------------------------------------------ INTERACTION */
@@ -1168,6 +1279,8 @@
     render();
     initMap();
     wireEvents();
+    wireAbout();
+    syncAboutFromLocation(); // /about deep link opens the dialog
     loadContext();
   }
 

@@ -34,9 +34,10 @@
         patterns, with coverage, historical context, and limitations shown alongside each
         result.</p>
     </div>
-    <!-- Discreet developer mark: logo-only link to the developer page. -->
-    <a class="ep-mark" href="/about.html" aria-label="About Eduardo Perez"
-       title="About the developer">EP</a>
+    <!-- Plain text link; app.js intercepts activation and opens the
+         About dialog without navigating. The real href keeps a
+         meaningful destination when JavaScript is unavailable. -->
+    <a class="about-link" id="aboutLink" href="/about">About</a>
   </div>
 </div>
 
@@ -73,16 +74,6 @@
         <p class="hint" id="freshnessNote"></p>
       </div>
 
-      <div class="fld">
-        <span class="flabel" id="layerLabel">Map layer</span>
-        <p class="ctl-static" aria-labelledby="layerLabel">Signed column anomaly</p>
-      </div>
-
-      <div class="fld">
-        <span class="flabel" id="baselineLabel">Baseline method</span>
-        <p class="ctl-static" aria-labelledby="baselineLabel">Previous three same-calendar years</p>
-      </div>
-
       <!-- The dots span is decorative (aria-hidden) and only rendered
            in the is-loading state; the accessible name comes from
            aria-label so dot changes are never announced. -->
@@ -100,7 +91,7 @@
           <h2 class="btitle">Map</h2>
         </div>
         <div id="map" role="region" aria-label="Study region map"></div>
-        <p class="map-state" id="mapState">Basemap only — boundary and data layers load from the backend.</p>
+        <p class="map-state" id="mapState">Basemap only. Boundary and data layers load from the backend.</p>
         <p class="map-state" id="satLayerState">Anomaly layer: waiting for the first analysis.</p>
         <button class="retry inblock" type="button" id="retryBoundary" hidden>Retry boundary</button>
         <!-- The legend renders from backend-supplied visualization
@@ -110,15 +101,13 @@
           <span class="bmeta">Anomaly legend renders from backend visualization metadata when the layer loads.</span>
         </div>
         <!-- Information block 2 of 3: the single compact map
-             explanation. Every map caveat lives here, once. -->
+             explanation. -->
         <div class="howto">
           <h3>About this layer</h3>
-          <p><b>Sentinel-5P tropospheric NO₂ column anomaly</b> for the selected date — the
-            day's column minus the pixelwise same-month historical median (previous three
-            years). A display layer for visual interpretation only: it shows a vertical
-            atmospheric column, not ground-level air; colours use a per-date display stretch
-            (not comparable across dates) with display-only smoothing over an oversampled
-            0.01° grid; and nothing shown here feeds the statistics.</p>
+          <p>Colors show the selected day's Sentinel-5P tropospheric NO₂ column anomaly. The
+            selected date is compared with the same calendar month in the previous three
+            years. The layer is smoothed for display and does not represent ground-level
+            concentration or AQI.</p>
         </div>
       </section>
 
@@ -168,7 +157,6 @@
       <section class="block">
         <div class="bhead">
           <h2 class="btitle">Observation detail</h2>
-          <span class="bmeta">Provenance travels with every number</span>
         </div>
         <dl class="detail">
           <div class="drow"><dt>Selected local date</dt><dd id="d-date">—</dd></div>
@@ -194,11 +182,8 @@
         <div class="bhead">
           <h2 class="btitle">What this prototype does not yet assess</h2>
         </div>
-        <p>This prototype does not yet classify air-quality episodes or assess persistence
-          across days, spatial extent, ground-monitor corroboration, or meteorology. Daily
-          valid-area coverage varies with clouds and retrieval quality — it is shown with
-          every value — and spatial coincidence with a road or facility is geography, not
-          attribution.</p>
+        <p>This prototype does not classify air-quality episodes or evaluate persistence,
+          ground-monitor measurements, or meteorological conditions.</p>
       </section>
 
     </div>
@@ -214,6 +199,32 @@
     <span class="attrib">Contains modified Copernicus Sentinel data</span>
   </div>
 </footer>
+
+<!-- About dialog: native modal opened by the About link or by
+     loading /about directly (app.js handles routing and focus). -->
+<dialog id="aboutDialog" aria-labelledby="aboutTitle">
+  <div class="dlg-inner">
+    <div class="dlg-head">
+      <h2 id="aboutTitle">Eduardo Perez</h2>
+      <button type="button" class="dlg-close" id="aboutClose"
+              aria-label="Close About dialog">&#215;</button>
+    </div>
+    <p class="dlg-text">Bay Area Air Quality Episode Finder is an independent web application
+      for exploring daily Sentinel-5P tropospheric NO₂ column anomalies across the Bay Area.
+      It provides historical comparison and data coverage for each selected date.</p>
+    <ul class="contact-list">
+      <li><a href="mailto:eduardojr.perez@sjsu.edu">eduardojr.perez@sjsu.edu</a></li>
+      <li><a href="https://www.linkedin.com/in/perez-eduardo/" target="_blank" rel="noopener noreferrer">LinkedIn profile</a></li>
+      <li><a href="https://github.com/perez-eduardo/Bay-Area-Air-Quality-Episode-Finder" target="_blank" rel="noopener noreferrer">View the application source repository</a></li>
+    </ul>
+    <div class="dlg-foot">
+      <p>© 2026 Eduardo Perez</p>
+      <p>Independent project. Not affiliated with or endorsed by BAAQMD, EPA, Google,
+        Copernicus, or OpenStreetMap.</p>
+      <p>Contains modified Copernicus Sentinel data. Map data © OpenStreetMap contributors.</p>
+    </div>
+  </div>
+</dialog>
 
 <script>window.BACKEND_ORIGIN = '__BACKEND_ORIGIN__';</script>
 <script src="/vendor/leaflet/leaflet.js"></script>

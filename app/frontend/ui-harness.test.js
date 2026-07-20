@@ -52,7 +52,16 @@ function makeNode(id) {
     setAttribute: function (k, v) { node.attributes[k] = v; },
     addEventListener: function (evt, fn) {
       (node.handlers[evt] = node.handlers[evt] || []).push(fn);
-    }
+    },
+    // <dialog> surface (harmless on non-dialog stubs).
+    open: false,
+    showModal: function () { node.open = true; },
+    close: function () {
+      node.open = false;
+      (node.handlers.close || []).slice().forEach(function (fn) { fn({}); });
+    },
+    focusCalls: 0,
+    focus: function () { node.focusCalls += 1; }
   };
   Object.defineProperty(node, 'innerHTML', {
     get: function () { return node._innerHTML || ''; },
@@ -276,10 +285,52 @@ function analysisBody(dateStr, overrides) {
 
 /* ------------------------------------------------------------- BOOT */
 
-function bootApp() {
+function bootApp(startPath) {
   pendingRequests.length = 0;
   var ids = {};
-  global.window = {BACKEND_ORIGIN: 'http://backend.test'};
+  // window stub with a working History API + popstate simulation.
+  var win = {
+    BACKEND_ORIGIN: 'http://backend.test',
+    location: {pathname: startPath || '/'},
+    handlers: {},
+    addEventListener: function (evt, fn) {
+      (win.handlers[evt] = win.handlers[evt] || []).push(fn);
+    },
+    _stack: [startPath || '/'],
+    _idx: 0,
+    _firePop: function () {
+      (win.handlers.popstate || []).slice().forEach(function (fn) {
+        fn({});
+      });
+    },
+    history: {
+      pushState: function (s, t, url) {
+        win._stack = win._stack.slice(0, win._idx + 1);
+        win._stack.push(url);
+        win._idx += 1;
+        win.location.pathname = url;
+      },
+      replaceState: function (s, t, url) {
+        win._stack[win._idx] = url;
+        win.location.pathname = url;
+      },
+      back: function () {
+        if (win._idx > 0) {
+          win._idx -= 1;
+          win.location.pathname = win._stack[win._idx];
+          win._firePop();
+        }
+      },
+      forward: function () {
+        if (win._idx < win._stack.length - 1) {
+          win._idx += 1;
+          win.location.pathname = win._stack[win._idx];
+          win._firePop();
+        }
+      }
+    }
+  };
+  global.window = win;
   global.document = {
     readyState: 'complete',
     getElementById: function (id) {
@@ -302,7 +353,7 @@ function bootApp() {
   };
   delete require.cache[require.resolve(APP_PATH)];
   require(APP_PATH);
-  return {ids: ids, L: L, map: L._map};
+  return {ids: ids, L: L, map: L._map, win: win};
 }
 
 // Boots and walks the app to a fully loaded default-date analysis.
@@ -372,20 +423,21 @@ test('display-only smoothing: the anomaly layer rides its own pane ' +
   settleAll(); await flush();
 });
 
-test('"displayed" appears only after a real tileload event',
+test('tile status shows "Rendering map…" until a real tileload, ' +
+    'then hides instead of leaving a permanent success message',
     async function () {
   var env = await bootToAnalysis();
-  var status = env.ids.satLayerState.textContent;
-  assert.match(status, /Rendering anomaly tiles/);
-  assert.doesNotMatch(status, /displayed/i);
+  assert.match(env.ids.satLayerState.textContent, /Rendering map/);
+  assert.equal(env.ids.satLayerState.hidden, false);
 
   sciLayersOnMap(env)[0].fire('tileload');
-  assert.match(env.ids.satLayerState.textContent,
-      /Anomaly layer displayed\./);
-  assert.match(env.ids.satLayerState.textContent, /2026-07-09/);
-  assert.match(env.ids.satLayerState.textContent, /mol\/m²/);
-  assert.match(env.ids.satLayerState.textContent,
-      /not comparable across dates/);
+  assert.equal(env.ids.satLayerState.textContent, '');
+  assert.equal(env.ids.satLayerState.hidden, true);
+  // The successful boundary likewise leaves no visible status.
+  assert.equal(env.ids.mapState.textContent, '');
+  assert.equal(env.ids.mapState.hidden, true);
+  // And plain availability leaves no permanent readout banner.
+  assert.equal(env.ids.readoutState.textContent, '');
   settleAll(); await flush();
 });
 
@@ -420,7 +472,7 @@ test('a new date removes the stale raster and legend immediately, ' +
   var env = await bootToAnalysis();
   var oldLayer = sciLayersOnMap(env)[0];
   oldLayer.fire('tileload');
-  assert.match(env.ids.satLayerState.textContent, /displayed/);
+  assert.equal(env.ids.satLayerState.hidden, true); // rendered, quiet
   assert.ok(env.ids.anomalyLegend.childNodes.length > 1); // full legend
 
   // User requests another date.
@@ -428,14 +480,16 @@ test('a new date removes the stale raster and legend immediately, ' +
   env.ids.loadButton.handlers.click[0]();
   await flush();
 
-  // Stale raster and legend are gone during loading.
+  // Stale raster and legend are gone during loading; the loading
+  // announcement lives in the live status region, not the tile line.
   assert.equal(sciLayersOnMap(env).length, 0);
   assert.ok(oldLayer.offCalled >= 1);
   assert.equal(env.ids.anomalyLegend.childNodes.length, 1);
   assert.match(env.ids.anomalyLegend.childNodes[0].textContent,
       /renders from backend visualization metadata/);
-  assert.match(env.ids.satLayerState.textContent,
-      /loading analysis for 2026-07-08/);
+  assert.equal(env.ids.satLayerState.hidden, true);
+  assert.match(env.ids.statusLive.textContent,
+      /Loading analysis for 2026-07-08/);
 
   // New analysis arrives; new layer starts rendering.
   takeRequest('/api/analysis?date=2026-07-08')
@@ -444,20 +498,17 @@ test('a new date removes the stale raster and legend immediately, ' +
   assert.equal(sciLayersOnMap(env).length, 1);
   var newLayer = sciLayersOnMap(env)[0];
   assert.notEqual(newLayer, oldLayer);
-  assert.match(env.ids.satLayerState.textContent,
-      /Rendering anomaly tiles/);
+  assert.match(env.ids.satLayerState.textContent, /Rendering map/);
 
   // A late event from the REMOVED layer must not change state.
   oldLayer.captured.tileload[0]({});
-  assert.match(env.ids.satLayerState.textContent,
-      /Rendering anomaly tiles/);
-  assert.doesNotMatch(env.ids.satLayerState.textContent, /displayed/i);
+  assert.match(env.ids.satLayerState.textContent, /Rendering map/);
 
-  // Only the new layer's own event moves it forward.
+  // Only the new layer's own event completes the lifecycle, after
+  // which the status hides rather than showing a success banner.
   newLayer.fire('tileload');
-  assert.match(env.ids.satLayerState.textContent,
-      /Anomaly layer displayed\./);
-  assert.match(env.ids.satLayerState.textContent, /2026-07-08/);
+  assert.equal(env.ids.satLayerState.textContent, '');
+  assert.equal(env.ids.satLayerState.hidden, true);
   settleAll(); await flush();
 });
 
@@ -658,71 +709,187 @@ test('CSS: dots are a fixed literal revealed by stepped width — the ' +
       /\.go\.is-loading \.dots::after \{ content: '…'; animation: none; width: auto; \}/);
 });
 
-test('main page links to /about.html through the accessible ' +
-    'logo-only EP mark', function () {
+test('static markup: no navigation bar or EP mark; one plain About ' +
+    'link; dialog content is exact and safe', function () {
   var html = fs.readFileSync(
       path.join(__dirname, 'public', 'index.html'), 'utf8');
-  var mark = html.match(/<a class="ep-mark"[\s\S]*?<\/a>/);
-  assert.ok(mark, 'ep-mark link exists');
-  assert.match(mark[0], /href="\/about\.html"/);
-  assert.match(mark[0], /aria-label="About Eduardo Perez"/);
-  assert.match(mark[0], /title="About the developer"/);
-  assert.match(mark[0], />EP</);
-});
+  var css = fs.readFileSync(
+      path.join(__dirname, 'public', 'app.css'), 'utf8');
+  var flat = html.replace(/\s+/g, ' ');
 
-test('about page: exact contact destinations, descriptive ' +
-    'repository label, and safe external-link attributes',
-    function () {
-  var html = fs.readFileSync(
-      path.join(__dirname, 'public', 'about.html'), 'utf8');
+  // No navigation bar, no EP monogram, anywhere.
+  assert.doesNotMatch(html, /topnav|tn-title|tn-links/);
+  assert.doesNotMatch(css, /topnav|\.ep-mark/);
+  assert.doesNotMatch(html, /ep-mark/);
+  assert.doesNotMatch(html, />EP</);
+
+  // One plain text About link in the masthead with a real href.
+  var link = html.match(/<a class="about-link"[^>]*>About<\/a>/);
+  assert.ok(link, 'about link exists');
+  assert.match(link[0], /id="aboutLink"/);
+  assert.match(link[0], /href="\/about"/);
+
+  // Native dialog with labelled heading and accessible close control.
+  assert.match(html, /<dialog id="aboutDialog" aria-labelledby="aboutTitle">/);
+  assert.match(html, /<h2 id="aboutTitle">Eduardo Perez<\/h2>/);
+  assert.match(html,
+      /<button type="button" class="dlg-close" id="aboutClose"\s+aria-label="Close About dialog">/);
+  assert.match(css, /#aboutDialog::backdrop/);
+
+  // Exact concise paragraph and footer texts.
+  assert.ok(flat.indexOf('Bay Area Air Quality Episode Finder is an ' +
+      'independent web application for exploring daily Sentinel-5P ' +
+      'tropospheric NO₂ column anomalies across the Bay Area. It ' +
+      'provides historical comparison and data coverage for each ' +
+      'selected date.') !== -1);
+  assert.ok(flat.indexOf('© 2026 Eduardo Perez') !== -1);
+  assert.ok(flat.indexOf('Independent project. Not affiliated with ' +
+      'or endorsed by BAAQMD, EPA, Google, Copernicus, or ' +
+      'OpenStreetMap.') !== -1);
+  assert.ok(flat.indexOf('Contains modified Copernicus Sentinel ' +
+      'data. Map data © OpenStreetMap contributors.') !== -1);
+
+  // Exact contacts; plain descriptive repository label.
   assert.match(html, /href="mailto:eduardojr\.perez@sjsu\.edu"/);
   assert.ok(html.indexOf('eduardojr.perez@sjsu.edu</a>') !== -1);
   assert.ok(html.indexOf(
       'https://www.linkedin.com/in/perez-eduardo/') !== -1);
   assert.ok(html.indexOf('https://github.com/perez-eduardo/' +
       'Bay-Area-Air-Quality-Episode-Finder') !== -1);
-  // The repository label names THIS application, not a generic
-  // GitHub profile.
-  assert.ok(html.indexOf('Bay Area Air Quality Episode Finder — ' +
-      'source repository</a>') !== -1);
+  assert.ok(html.indexOf(
+      'View the application source repository</a>') !== -1);
+
+  // None of the removed wording appears anywhere on the page.
+  assert.doesNotMatch(flat, /NASA/i);
+  assert.doesNotMatch(flat, /EarthRISE/i);
+  assert.doesNotMatch(flat, /internship/i);
+  assert.doesNotMatch(flat, /portfolio|résumé|resume/i);
+  assert.doesNotMatch(flat, /MIT|BSD|GPL|Apache|public domain/);
+
   // External links open safely; the mailto stays in-context.
-  var links = html.match(/<a [^>]*href="https:[^>]*>/g) || [];
+  var dialogHtml = html.match(/<dialog[\s\S]*?<\/dialog>/)[0];
+  var links = dialogHtml.match(/<a [^>]*href="https:[^>]*>/g) || [];
+  assert.ok(links.length >= 2);
   links.forEach(function (tag) {
-    if (tag.indexOf('fonts.g') !== -1) return; // stylesheet preconnects
     assert.match(tag, /target="_blank"/);
     assert.match(tag, /rel="noopener noreferrer"/);
   });
-  var mailtoTag = html.match(/<a [^>]*mailto:[^>]*>/)[0];
+  var mailtoTag = dialogHtml.match(/<a [^>]*mailto:[^>]*>/)[0];
   assert.doesNotMatch(mailtoTag, /target=/);
-  assert.match(html, /<a class="back-link" href="\/"/);
 });
 
-test('about page: independence notice, copyright, no imagery, no ' +
-    'invented license, no affiliation claim', function () {
+test('About link opens the native dialog without navigating, X and ' +
+    'Escape close it, focus returns, and panel clicks stay open',
+    async function () {
+  var env = await bootToAnalysis();
+  var dlg = env.ids.aboutDialog;
+  var link = env.ids.aboutLink;
+
+  var prevented = 0;
+  link.handlers.click[0]({preventDefault: function () { prevented += 1; }});
+  assert.equal(prevented, 1);                 // no page navigation
+  assert.equal(dlg.open, true);               // showModal() ran
+  assert.equal(env.win.location.pathname, '/about'); // pushState
+
+  // Clicking inside the panel does not close it.
+  dlg.handlers.click[0]({target: {some: 'child'}});
+  assert.equal(dlg.open, true);
+
+  // The X control closes it, the URL returns to /, focus returns.
+  var focusBefore = link.focusCalls;
+  env.ids.aboutClose.handlers.click[0]();
+  assert.equal(dlg.open, false);
+  assert.equal(env.win.location.pathname, '/');
+  assert.equal(link.focusCalls, focusBefore + 1);
+
+  // Escape funnels through the same native close event: simulate the
+  // native cancel -> close sequence directly.
+  link.handlers.click[0]({preventDefault: function () {}});
+  assert.equal(dlg.open, true);
+  dlg.close();                                // what native Escape does
+  assert.equal(dlg.open, false);
+  assert.equal(env.win.location.pathname, '/');
+  assert.equal(link.focusCalls, focusBefore + 2);
+
+  // Backdrop clicks (event target is the dialog itself) close it.
+  link.handlers.click[0]({preventDefault: function () {}});
+  dlg.handlers.click[0]({target: dlg});
+  assert.equal(dlg.open, false);
+  assert.equal(env.win.location.pathname, '/');
+  settleAll(); await flush();
+});
+
+test('/about deep link opens the dialog automatically and closing ' +
+    'rewrites the URL to / without a reload', async function () {
+  var env = bootApp('/about');
+  assert.equal(env.ids.aboutDialog.open, true); // opened during init
+  takeRequest('/api/context').resolve(200, contextBody());
+  await flush();
+  env.ids.aboutClose.handlers.click[0]();
+  assert.equal(env.ids.aboutDialog.open, false);
+  assert.equal(env.win.location.pathname, '/'); // replaceState path
+  settleAll(); await flush();
+});
+
+test('browser Back closes the modal and Forward reopens it, with ' +
+    'no history loops', async function () {
+  var env = await bootToAnalysis();
+  var dlg = env.ids.aboutDialog;
+  env.ids.aboutLink.handlers.click[0]({preventDefault: function () {}});
+  assert.equal(dlg.open, true);
+  assert.deepEqual(env.win._stack, ['/', '/about']);
+
+  env.win.history.back();                     // user presses Back
+  assert.equal(dlg.open, false);
+  assert.equal(env.win.location.pathname, '/');
+
+  env.win.history.forward();                  // user presses Forward
+  assert.equal(dlg.open, true);
+  assert.equal(env.win.location.pathname, '/about');
+
+  env.win.history.back();                     // Back again still works
+  assert.equal(dlg.open, false);
+  assert.equal(env.win.location.pathname, '/');
+  assert.deepEqual(env.win._stack, ['/', '/about']); // no loop growth
+  settleAll(); await flush();
+});
+
+test('no em or en dash appears in visible page prose or generated ' +
+    'UI strings (null-value placeholder glyphs excepted)',
+    function () {
+  ['index.html'].forEach(function (name) {
+    var html = fs.readFileSync(
+        path.join(__dirname, 'public', name), 'utf8')
+        .replace(/<!--[\s\S]*?-->/g, '')      // comments are invisible
+        .replace(/>—</g, '><');               // standalone null glyphs
+    assert.doesNotMatch(html, /[–—]/,
+        name + ' contains a visible em/en dash');
+  });
+  var js = fs.readFileSync(
+      path.join(__dirname, 'public', 'app.js'), 'utf8');
+  js.split('\n').forEach(function (line, i) {
+    // String literals only; the bare '—' placeholder constant for
+    // null values is the documented exception.
+    if (/'[^']*[–—][^']*'/.test(line) &&
+        line.indexOf("'—'") === -1) {
+      assert.fail('app.js:' + (i + 1) +
+          ' has an em/en dash inside a UI string: ' + line.trim());
+    }
+  });
+});
+
+test('the rail contains no dedicated Baseline method or Map layer ' +
+    'control', function () {
   var html = fs.readFileSync(
-      path.join(__dirname, 'public', 'about.html'), 'utf8');
-  // Collapse source line wrapping so phrases match as rendered.
+      path.join(__dirname, 'public', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /Baseline method/);
+  assert.doesNotMatch(html, /id="baselineLabel"/);
+  assert.doesNotMatch(html, /id="layerLabel"/);
+  // The baseline is mentioned once, inside the compact map
+  // explanation.
   var flat = html.replace(/\s+/g, ' ');
-  assert.ok(flat.indexOf('Independent project. Not affiliated with ' +
-      'or endorsed by NASA, EarthRISE, BAAQMD, EPA, Google, or ' +
-      'Copernicus.') !== -1);
-  assert.ok(flat.indexOf('© 2026 Eduardo Perez') !== -1);
-  assert.ok(flat.indexOf('Contains modified Copernicus Sentinel ' +
-      'data') !== -1);
-  assert.ok(flat.indexOf('OpenStreetMap contributors') !== -1);
-  // No raster/external imagery at all — icons are inline SVG, so no
-  // NASA logo or insignia can be present.
-  assert.equal((html.match(/<img/g) || []).length, 0);
-  // The only NASA mentions are the factual portfolio-context line
-  // (exact owner-approved wording) and the non-affiliation notice.
-  assert.ok(flat.indexOf('This independent Earth-observation ' +
-      'software project was created as a public technical portfolio ' +
-      'project for consideration for the NASA EarthRISE Developers ' +
-      'Academy internship opportunity.') !== -1);
-  assert.doesNotMatch(flat,
-      /(created|operated|sponsored|approved) by NASA/i);
-  // No license file exists in this repository: copyright only.
-  assert.doesNotMatch(flat, /MIT|BSD|GPL|Apache|public domain/);
+  assert.ok(flat.indexOf('compared with the same calendar month in ' +
+      'the previous three years') !== -1);
 });
 
 test('null scientific values render as em dashes, never zero',
