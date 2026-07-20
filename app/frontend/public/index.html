@@ -26,12 +26,17 @@
 </div>
 
 <div class="masthead">
-  <div class="wrap">
-    <p class="eyebrow">Earth observation · evidence dashboard</p>
-    <h1>Bay Area Air Quality Episode Finder</h1>
-    <p class="standfirst">Satellite evidence for examining unusual daily tropospheric NO₂ column
-      patterns, with coverage, historical context, and limitations shown alongside each
-      result.</p>
+  <div class="wrap mast-flex">
+    <div>
+      <p class="eyebrow">Earth observation · evidence dashboard</p>
+      <h1>Bay Area Air Quality Episode Finder</h1>
+      <p class="standfirst">Satellite evidence for examining unusual daily tropospheric NO₂ column
+        patterns, with coverage, historical context, and limitations shown alongside each
+        result.</p>
+    </div>
+    <!-- Discreet developer mark: logo-only link to the developer page. -->
+    <a class="ep-mark" href="/about.html" aria-label="About Eduardo Perez"
+       title="About the developer">EP</a>
   </div>
 </div>
 
@@ -78,7 +83,11 @@
         <p class="ctl-static" aria-labelledby="baselineLabel">Previous three same-calendar years</p>
       </div>
 
-      <button class="go" type="button" id="loadButton" disabled>Load date</button>
+      <!-- The dots span is decorative (aria-hidden) and only rendered
+           in the is-loading state; the accessible name comes from
+           aria-label so dot changes are never announced. -->
+      <button class="go" type="button" id="loadButton" disabled
+              aria-label="Load selected date" aria-busy="false"><span id="loadButtonText">Load date</span><span class="dots" aria-hidden="true"></span></button>
 
       <p class="status-live" id="statusLive" role="status" aria-live="polite"></p>
       <button class="retry" type="button" id="retryContext" hidden>Retry connection</button>

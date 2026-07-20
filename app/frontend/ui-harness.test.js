@@ -27,6 +27,7 @@
 var test = require('node:test');
 var assert = require('node:assert/strict');
 var path = require('path');
+var fs = require('fs');
 
 var APP_PATH = path.join(__dirname, 'public', 'app.js');
 
@@ -72,7 +73,10 @@ function makeLeafletStub() {
       var i = mapObj.layers.indexOf(layer);
       if (i !== -1) mapObj.layers.splice(i, 1);
     },
-    fitBounds: function () {},
+    fitBoundsCalls: [],
+    fitBounds: function (bounds, options) {
+      mapObj.fitBoundsCalls.push({bounds: bounds, options: options});
+    },
     createPane: function (name) {
       mapObj.panes[name] = {style: {}};
       return mapObj.panes[name];
@@ -465,6 +469,12 @@ test('the boundary outline is brought above the raster and is never ' +
   assert.ok(geo.broughtToFront >= 1, 'bringToFront called');
   assert.ok(env.map.layers.indexOf(geo) !== -1, 'boundary on map');
 
+  // The initial official-boundary fit runs exactly once and with the
+  // zoom animation DISABLED (Leaflet 1.9.4 zoomanim race guard).
+  assert.equal(env.map.fitBoundsCalls.length, 1);
+  assert.deepEqual(env.map.fitBoundsCalls[0].options,
+      {padding: [12, 12], animate: false});
+
   // Unavailable state removes only the scientific raster.
   env.ids.analysisDate.value = '2026-07-07';
   env.ids.loadButton.handlers.click[0]();
@@ -539,6 +549,180 @@ test('an invalid backend palette yields a truthful ' +
   assert.doesNotMatch(legend.childNodes[0].textContent,
       /#?[0-9a-f]{6}/i); // no invented palette
   settleAll(); await flush();
+});
+
+test('Load button: loading state (disabled, aria-busy, is-loading, ' +
+    '"Loading" label) and restore after success', async function () {
+  var env = await bootToAnalysis();
+  var btn = env.ids.loadButton;
+  var label = env.ids.loadButtonText;
+  // Idle after the automatic default-date load completed.
+  assert.equal(btn.disabled, false);
+  assert.equal(btn.className, 'go');
+  assert.equal(btn.attributes['aria-busy'], 'false');
+  assert.equal(btn.attributes['aria-label'], 'Load selected date');
+  assert.equal(label.textContent, 'Load date');
+
+  env.ids.analysisDate.value = '2026-07-08';
+  btn.handlers.click[0]();
+  await flush();
+  assert.equal(btn.disabled, true);
+  assert.match(btn.className, /\bis-loading\b/); // gates the dots span
+  assert.equal(btn.attributes['aria-busy'], 'true');
+  assert.equal(btn.attributes['aria-label'], 'Loading analysis');
+  assert.equal(label.textContent, 'Loading');
+
+  takeRequest('/api/analysis?date=2026-07-08')
+      .resolve(200, analysisBody('2026-07-08'));
+  await flush();
+  assert.equal(btn.disabled, false);
+  assert.equal(btn.className, 'go');       // dots no longer rendered
+  assert.equal(btn.attributes['aria-busy'], 'false');
+  assert.equal(label.textContent, 'Load date');
+  settleAll(); await flush();
+});
+
+test('Load button: restores its normal state after a backend error',
+    async function () {
+  var env = await bootToAnalysis();
+  var btn = env.ids.loadButton;
+  env.ids.analysisDate.value = '2026-07-06';
+  btn.handlers.click[0]();
+  await flush();
+  assert.equal(btn.disabled, true);
+  takeRequest('/api/analysis?date=2026-07-06').resolve(502, {
+    ok: false, error: {code: 'upstream_error', message: 'boom'}
+  });
+  await flush();
+  assert.equal(btn.disabled, false);
+  assert.equal(btn.className, 'go');
+  assert.equal(btn.attributes['aria-busy'], 'false');
+  assert.equal(env.ids.loadButtonText.textContent, 'Load date');
+  settleAll(); await flush();
+});
+
+test('Load button: a stale superseded request cannot reset the ' +
+    'button while a newer request is active', async function () {
+  var env = await bootToAnalysis();
+  var btn = env.ids.loadButton;
+  env.ids.analysisDate.value = '2026-07-07';
+  btn.handlers.click[0]();                    // request A
+  await flush();
+  var reqA = takeRequest('/api/analysis?date=2026-07-07');
+  env.ids.retryAnalysis.handlers.click[0]();  // request B supersedes A
+  await flush();
+  assert.equal(btn.disabled, true);
+  // The STALE request resolving must not touch the loading state.
+  reqA.resolve(200, analysisBody('2026-07-07'));
+  await flush();
+  assert.equal(btn.disabled, true);
+  assert.match(btn.className, /\bis-loading\b/);
+  assert.equal(btn.attributes['aria-busy'], 'true');
+  // Only the newer request's terminal state restores the button.
+  takeRequest('/api/analysis?date=2026-07-07')
+      .resolve(200, analysisBody('2026-07-07'));
+  await flush();
+  assert.equal(btn.disabled, false);
+  assert.equal(btn.className, 'go');
+  settleAll(); await flush();
+});
+
+/* ------------------------------- static files: CSS + about page */
+
+test('CSS: dots are a fixed literal revealed by stepped width — the ' +
+    'content property is never animated — with a stable 3ch box and ' +
+    'a static reduced-motion presentation', function () {
+  var css = fs.readFileSync(
+      path.join(__dirname, 'public', 'app.css'), 'utf8');
+  assert.match(css, /\.go \.dots \{ display: none; \}/);
+  // Stable reserved box on the parent span.
+  assert.match(css, /\.go\.is-loading \.dots \{[^}]*width: 3ch/);
+  // Fixed three-dot literal, overflow-hidden reveal from width 0.
+  assert.match(css,
+      /\.go\.is-loading \.dots::after \{[^}]*content: '\.\.\.';/);
+  assert.match(css,
+      /\.go\.is-loading \.dots::after \{[^}]*overflow: hidden/);
+  assert.match(css, /\.go\.is-loading \.dots::after \{[^}]*width: 0/);
+  // The keyframes step width through 0 / 1ch / 2ch / 3ch dots…
+  var kf = css.match(/@keyframes loading-dots \{[\s\S]*?\n\}/);
+  assert.ok(kf, 'loading-dots keyframes exist');
+  assert.match(kf[0], /0%, 24%\s+\{ width: 0; \}/);
+  assert.match(kf[0], /25%, 49%\s+\{ width: 1ch; \}/);
+  assert.match(kf[0], /50%, 74%\s+\{ width: 2ch; \}/);
+  assert.match(kf[0], /75%, 100%\s+\{ width: 3ch; \}/);
+  // …and never touch the content property.
+  assert.doesNotMatch(kf[0], /content/);
+  // Reduced motion: static ellipsis, no cycling, visible width.
+  var reduced = css.slice(css.indexOf('prefers-reduced-motion'));
+  assert.match(reduced,
+      /\.go\.is-loading \.dots::after \{ content: '…'; animation: none; width: auto; \}/);
+});
+
+test('main page links to /about.html through the accessible ' +
+    'logo-only EP mark', function () {
+  var html = fs.readFileSync(
+      path.join(__dirname, 'public', 'index.html'), 'utf8');
+  var mark = html.match(/<a class="ep-mark"[\s\S]*?<\/a>/);
+  assert.ok(mark, 'ep-mark link exists');
+  assert.match(mark[0], /href="\/about\.html"/);
+  assert.match(mark[0], /aria-label="About Eduardo Perez"/);
+  assert.match(mark[0], /title="About the developer"/);
+  assert.match(mark[0], />EP</);
+});
+
+test('about page: exact contact destinations, descriptive ' +
+    'repository label, and safe external-link attributes',
+    function () {
+  var html = fs.readFileSync(
+      path.join(__dirname, 'public', 'about.html'), 'utf8');
+  assert.match(html, /href="mailto:eduardojr\.perez@sjsu\.edu"/);
+  assert.ok(html.indexOf('eduardojr.perez@sjsu.edu</a>') !== -1);
+  assert.ok(html.indexOf(
+      'https://www.linkedin.com/in/perez-eduardo/') !== -1);
+  assert.ok(html.indexOf('https://github.com/perez-eduardo/' +
+      'Bay-Area-Air-Quality-Episode-Finder') !== -1);
+  // The repository label names THIS application, not a generic
+  // GitHub profile.
+  assert.ok(html.indexOf('Bay Area Air Quality Episode Finder — ' +
+      'source repository</a>') !== -1);
+  // External links open safely; the mailto stays in-context.
+  var links = html.match(/<a [^>]*href="https:[^>]*>/g) || [];
+  links.forEach(function (tag) {
+    if (tag.indexOf('fonts.g') !== -1) return; // stylesheet preconnects
+    assert.match(tag, /target="_blank"/);
+    assert.match(tag, /rel="noopener noreferrer"/);
+  });
+  var mailtoTag = html.match(/<a [^>]*mailto:[^>]*>/)[0];
+  assert.doesNotMatch(mailtoTag, /target=/);
+  assert.match(html, /<a class="back-link" href="\/"/);
+});
+
+test('about page: independence notice, copyright, no imagery, no ' +
+    'invented license, no affiliation claim', function () {
+  var html = fs.readFileSync(
+      path.join(__dirname, 'public', 'about.html'), 'utf8');
+  // Collapse source line wrapping so phrases match as rendered.
+  var flat = html.replace(/\s+/g, ' ');
+  assert.ok(flat.indexOf('Independent project. Not affiliated with ' +
+      'or endorsed by NASA, EarthRISE, BAAQMD, EPA, Google, or ' +
+      'Copernicus.') !== -1);
+  assert.ok(flat.indexOf('© 2026 Eduardo Perez') !== -1);
+  assert.ok(flat.indexOf('Contains modified Copernicus Sentinel ' +
+      'data') !== -1);
+  assert.ok(flat.indexOf('OpenStreetMap contributors') !== -1);
+  // No raster/external imagery at all — icons are inline SVG, so no
+  // NASA logo or insignia can be present.
+  assert.equal((html.match(/<img/g) || []).length, 0);
+  // The only NASA mentions are the factual portfolio-context line
+  // (exact owner-approved wording) and the non-affiliation notice.
+  assert.ok(flat.indexOf('This independent Earth-observation ' +
+      'software project was created as a public technical portfolio ' +
+      'project for consideration for the NASA EarthRISE Developers ' +
+      'Academy internship opportunity.') !== -1);
+  assert.doesNotMatch(flat,
+      /(created|operated|sponsored|approved) by NASA/i);
+  // No license file exists in this repository: copyright only.
+  assert.doesNotMatch(flat, /MIT|BSD|GPL|Apache|public domain/);
 });
 
 test('null scientific values render as em dashes, never zero',

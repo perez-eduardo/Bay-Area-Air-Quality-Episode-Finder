@@ -1,6 +1,6 @@
 /*
  * Bay Area Air Quality Episode Finder
- * Railway frontend service — static file server.
+ * Railway frontend service ï¿½ static file server.
  *
  * Purpose: serve the public UI's static files. It performs no
  * processing, holds no credentials, and never calls Earth Engine. All
@@ -50,6 +50,7 @@ var MIME = {
 function resolveFile(urlPath) {
   var clean = decodeURIComponent(urlPath.split('?')[0]);
   if (clean === '/' || clean === '') clean = '/index.html';
+  if (clean === '/about') clean = '/about.html'; // extensionless alias
   var target = path.join(CONFIG.root, path.normalize(clean));
   var rootWithSep = CONFIG.root + path.sep;
   if (target !== CONFIG.root && target.indexOf(rootWithSep) !== 0) {

@@ -115,6 +115,7 @@
     freshness: el('freshnessNote'),
     dateInput: el('analysisDate'),
     loadButton: el('loadButton'),
+    loadButtonText: el('loadButtonText'),
     statusLive: el('statusLive'),
     retryContext: el('retryContext'),
     retryBoundary: el('retryBoundary'),
@@ -333,8 +334,13 @@
     if (boundaryLayer.bringToFront) boundaryLayer.bringToFront();
     if (!boundaryFitted) {
       try {
+        // animate: false — a warm-cache analysis can resolve while an
+        // animated fitBounds zoom is still running, and adding the
+        // anomaly grid layer mid-animation trips a Leaflet 1.9.4
+        // zoomanim race (TypeError reading 'project'). The fitted
+        // bounds, zoom, and center are identical without animation.
         leafletMap.fitBounds(boundaryLayer.getBounds(),
-            {padding: [12, 12]});
+            {padding: [12, 12], animate: false});
         boundaryFitted = true;
       } catch (ignored) { /* keep the default view */ }
     }
@@ -460,10 +466,27 @@
     var loading = state.analysis.status === 'loading';
 
     nodes.dateInput.disabled = !ready || loading;
-    // The Load button is disabled while a request is active; the
-    // selected date stays visible in the input during loading.
+    /*
+     * The Load button's loading presentation is driven by ONE
+     * authoritative flag: state.analysis.status === 'loading', which
+     * the request tokens already protect (a stale response cannot
+     * leave the loading state while a newer request is active, and
+     * the automatic default-date load uses this same path). While
+     * loading the button is disabled, exposes aria-busy with a stable
+     * accessible name (so screen readers never announce individual
+     * dot changes — the dots span is aria-hidden), and the animated
+     * three-dot cycle is pure CSS gated by the is-loading class
+     * (static "Loading…" under prefers-reduced-motion).
+     */
     nodes.loadButton.disabled = !ready || loading;
-    nodes.loadButton.textContent = loading ? 'Loading…' : 'Load date';
+    nodes.loadButton.className = 'go' + (loading ? ' is-loading' : '');
+    if (nodes.loadButton.setAttribute) {
+      nodes.loadButton.setAttribute('aria-busy',
+          loading ? 'true' : 'false');
+      nodes.loadButton.setAttribute('aria-label',
+          loading ? 'Loading analysis' : 'Load selected date');
+    }
+    setText(nodes.loadButtonText, loading ? 'Loading' : 'Load date');
 
     nodes.retryContext.hidden = !(ctx.status === 'ee_not_ready' ||
         ctx.status === 'timeout' || ctx.status === 'unreachable' ||
