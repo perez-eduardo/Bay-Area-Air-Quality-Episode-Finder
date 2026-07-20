@@ -264,7 +264,7 @@ The decided hosting approach (owner decision, 2026-07-18) is:
 - The backend authenticates to Earth Engine, so public users do not need their own Earth Engine accounts
 - AWS Route 53 for DNS because the user’s domain is managed there
 
-Migration to this architecture is not implemented, and the technology choices — frontend framework, backend runtime, map library, Earth Engine authentication design, caching design, any database — remain open owner decisions (see docs/architecture.md).
+Status update (2026-07-19/20): the backend half of this architecture is implemented and live as an infrastructure proof of connection (Railway backend service, Earth Engine service-account authentication, and the api.neuralnetworks.me API domain all verified), and frontend/UI implementation has started; production integration and public deployment are incomplete. After the completed full-history daily regional-method audit, the canonical native-lattice regional calculation was selected as the production regional-statistics method (see docs/methodology.md). The remaining technology choices — frontend framework, map library, production API endpoint design, caching design, any database, the public map/tile grid, and the frontend hostname — remain open owner decisions (see docs/architecture.md and docs/ui-data-contract.md).
 
 The previous plan — a Google Earth Engine App linked from a simple Railway landing page — is no longer the planned final architecture and remains only a possible fallback.
 

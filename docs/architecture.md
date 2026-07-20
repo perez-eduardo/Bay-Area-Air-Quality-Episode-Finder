@@ -3,9 +3,11 @@
 Planned components and how they fit together. The public-application
 architecture below is an owner decision (2026-07-18). The **backend
 infrastructure — a proof of connection — is implemented and running**
-(live-tested 2026-07-19/20; details below). The frontend, the
-scientific/production API endpoints, caching, production processing,
-and the public UI are **not** implemented.
+(live-tested 2026-07-19/20; details below), and **frontend/UI
+implementation is in progress** (a UI shell exists; see the frontend
+status section). The scientific/production API endpoints, caching,
+production processing, and the deployed public application are
+**not** implemented.
 
 ## Decision status
 
@@ -38,6 +40,15 @@ and the public UI are **not** implemented.
   TODO in [data-sources.md](data-sources.md)).
 - First dataset: Sentinel-5P OFFL tropospheric NO₂
   (`COPERNICUS/S5P/OFFL/L3_NO2`).
+- Production regional-statistics method (2026-07-20): the canonical
+  native-lattice regional calculation, selected after the completed
+  full-history 08b daily audit; the legacy EPSG:3310 / 7000 m
+  reduction is an exploration/reference method (decision, verified
+  results, and scope limits in [methodology.md](methodology.md) — the
+  public map/tile grid is NOT decided by this).
+- UI data contract (2026-07-20): the frontend/backend boundary is
+  defined semantically in [ui-data-contract.md](ui-data-contract.md);
+  endpoint paths and transport design remain open.
 
 **Completed since (implementation facts, 2026-07-19/20 — moved out of
 the open list; details in the implemented-backend section below):**
@@ -47,24 +58,32 @@ the open list; details in the implemented-backend section below):**
   Engine accounts).
 - Backend readability of the official BAAQMD boundary asset: verified
   live through the backend credentials.
-- Backend repository placement: `app/backend/` (the intended future
-  frontend sibling is `app/frontend/`, not yet created).
+- Backend repository placement: `app/backend/` (the frontend sibling
+  `app/frontend/` now holds the in-progress UI shell).
 - Railway backend deployment configuration: configured and running.
 - API custom domain: `api.neuralnetworks.me` connected with TLS.
 
 **Still open** (owner decisions, marked TODO here and in the other
 docs; none may be chosen by coding assistants):
 
-- Frontend framework and stack — not chosen (no framework, React or
-  otherwise, is decided)
+- Frontend framework and stack — not chosen as a final decision (the
+  in-progress UI shell currently uses plain browser JavaScript with no
+  framework and no build step — a current implementation, not an
+  immutable architecture requirement)
 - Backend framework — not chosen (the proof service deliberately uses
   only Node's built-in `http` module; that is an infrastructure proof,
   not a framework decision)
-- Map library for the public UI — not chosen
+- Map library for the public UI — not chosen as a final decision (the
+  in-progress UI shell currently vendors Leaflet for its basemap — a
+  current implementation, not an immutable architecture requirement)
 - Caching and precomputation design; whether any database is used —
   not chosen
 - Production backend API endpoint design — TODO (the three proof
-  endpoints below are not the application API)
+  endpoints below are not the application API; whatever is designed
+  must implement the semantics in
+  [ui-data-contract.md](ui-data-contract.md))
+- Public map rendering/tile grid and any episode-spatial-analysis
+  grid — not chosen (not decided by the regional-statistics selection)
 - Frontend hostname — not chosen (the API hostname is live; the
   public-facing frontend name remains an owner decision)
 - How the exploration scripts' processing logic is reorganized into
@@ -101,8 +120,8 @@ frontend → Railway backend/API → Google Earth Engine).
 - `app/backend/` — the tracked backend service: `server.js`,
   `package.json`, `package-lock.json`, and a `README.md` with run and
   deploy instructions.
-- `app/frontend/` — the intended future frontend sibling; **not yet
-  created**.
+- `app/frontend/` — the frontend sibling; now holds the in-progress
+  public UI shell (see the frontend status section below).
 - Relevant commits: `9606a43` (backend proof of connection), `c896789`
   (`.gitignore` hardening against key-shaped JSON filenames).
 
@@ -179,11 +198,57 @@ a valid-regional-data claim.
 
 ### Still not implemented
 
-Frontend service, framework, and hostname; the production scientific
-API endpoints; the map/chart UI and map library;
-caching/precomputation; any database; reorganization of the
-exploration scripts' processing into backend modules; public-app
-testing. These remain the open owner decisions listed above.
+The production scientific API endpoints; frontend production
+integration and deployment; the frontend hostname; final map/chart UI
+and map-library decision; caching/precomputation; any database;
+reorganization of the exploration scripts' processing into backend
+modules; public-app testing. The frontend UI shell is **in progress**
+(next section) but is not integrated, deployed, or public.
+
+## Frontend/UI status and the data boundary (2026-07-20)
+
+### Frontend implementation (in progress)
+
+Frontend/UI implementation has started at `app/frontend/` (work in
+progress — **not** integrated with production endpoints, **not**
+deployed, and **not** public). What exists today:
+
+- a static-file service (Node's built-in `http`, no build step, no
+  runtime dependencies) that serves the UI and injects the backend
+  origin as an environment setting — a current implementation, not a
+  framework decision;
+- an interface shell wired to the backend's infrastructure status
+  endpoint only: it renders dataset/freshness metadata (product,
+  region, latest represented local date, publication lag) and backend
+  reachability, with explicit status states;
+- a vendored Leaflet basemap with **no data layer loaded** — a current
+  implementation choice, not a final map-library decision;
+- disabled analysis controls that state the production API does not
+  exist yet, placeholder readouts using the project's careful language,
+  visible scientific disclaimers (column vs ground level; no AQI or
+  health meaning; episode assessment explicitly not implemented).
+
+No analysis runs in the frontend, and no scientific value is computed
+or displayed yet.
+
+### Semantic data boundary (backend is the authority)
+
+The frontend/backend boundary is defined **semantically** in
+[ui-data-contract.md](ui-data-contract.md) — response concepts, null
+and status semantics, date-availability rules, labeling requirements,
+and testable UI states. Endpoint paths, transport design, and payload
+encodings remain open owner decisions. Two principles govern the
+boundary:
+
+- the **backend supplies authoritative date availability** — including
+  the last included local date that conservatively excludes the newest
+  represented date — and the frontend's date picker must consume it
+  rather than assuming "today" is available;
+- the **backend supplies authoritative null/status semantics** (no
+  products; products but no valid retrieval; structurally partial
+  baseline; upstream error) so the frontend never reconstructs Earth
+  Engine rules, and a null scientific value is never converted to
+  numeric zero.
 
 ## Components
 
@@ -255,11 +320,12 @@ evaluation (only if ML is ever added), and explanatory charts.
 
 The application code lives under `app/`: the backend service exists at
 `app/backend/` (the running proof of connection described above), and
-`app/frontend/` is the intended future sibling for the public UI (not
-yet created). The `landing-page/` directory holds superseded planning
-notes from the earlier landing-page-only plan; it is **not** the
-application location. A simple landing or entry page may still exist
-later as part of the application.
+`app/frontend/` holds the in-progress public UI shell (see the
+frontend status section — not integrated, deployed, or public). The
+`landing-page/` directory holds superseded planning notes from the
+earlier landing-page-only plan; it is **not** the application
+location. A simple landing or entry page may still exist later as part
+of the application.
 
 ### Hosting and access
 

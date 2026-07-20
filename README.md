@@ -8,21 +8,22 @@ reasoning behind any interpretation of them. **Episode detection** — scanning 
 data for periods that look unusually poor, persistent, and widespread — is one
 planned feature of the dashboard, not the only one.
 
-> **Status: Railway backend infrastructure proof live; exploratory
-> baseline and anomaly visualization complete; the public dashboard app
-> is not built.**
+> **Status: backend infrastructure live; production regional-statistics
+> method selected; frontend/UI implementation started; production
+> integration and public deployment are incomplete.**
 > The Railway backend infrastructure proof is live (2026-07-19/20):
 > Earth Engine service-account authentication and read access to the
 > official BAAQMD boundary asset are verified through the deployed
-> backend. The frontend and the actual scientific public application
-> are **not** built. Earth Engine exploration scripts exist (see
-> `earthengine/`); the preprocessing investigation is closed with an
-> accepted **working** daily rule (practical, not final); the approved
-> exploratory historical baseline and **satellite-column anomaly**
-> visualization is implemented and live-tested (script 06); and the
-> historical-record homogeneity audit is complete with the recorded
-> Outcome B baseline policy — still not episode classification, with no
-> health or AQI interpretation (see
+> backend. After the completed full-history daily regional-method
+> audit, the **canonical native-lattice regional calculation** is the
+> selected production regional-statistics method (details and verified
+> results in [docs/methodology.md](docs/methodology.md)).
+> Frontend/UI implementation has started (an interface shell wired to
+> the backend's status endpoint); the actual scientific public
+> application — production API, integrated UI, public deployment — is
+> **not** built. The historical-record homogeneity audit is complete
+> with the recorded Outcome B baseline policy — still not episode
+> classification, with no health or AQI interpretation (see
 > [docs/roadmap.md](docs/roadmap.md)). No current feature detects or
 > classifies episodes.
 
@@ -83,14 +84,14 @@ explicit owner decision. Coverage sensitivity and formal
 surface-monitor validation remain future work. No current feature
 detects or classifies episodes.
 
-## Architecture (decided; backend half live, application not built)
+## Architecture (decided; backend live, frontend in progress, app not built)
 
 Railway hosts the **complete public application** (owner decision,
 2026-07-18):
 
 ```text
 Browser
-  → Railway-hosted frontend      (future work)
+  → Railway-hosted frontend      (UI shell in progress; not deployed)
   → Railway backend/API          (infrastructure proof live)
   → Google Earth Engine
   → statistics, map layers/tiles, and geospatial results
@@ -111,10 +112,13 @@ Railway backend service, which authenticates to Google Earth Engine
 with a service account and returns JSON. Its endpoints (including
 `/api/ee-check`) are **infrastructure checks only** — they verify that
 the official BAAQMD boundary asset is readable and the Sentinel-5P
-collection is reachable, and return no air-quality results. The
-frontend and the production scientific API remain future work, and the
-frontend/backend frameworks, map library, API design, caching, any
-database, and the frontend hostname are open owner decisions (see
+collection is reachable, and return no air-quality results. A frontend
+UI shell is in progress at `app/frontend/` (not integrated, deployed,
+or public); the semantics the production API and UI must follow are
+defined in [docs/ui-data-contract.md](docs/ui-data-contract.md), while
+the frontend/backend frameworks, map library, endpoint design,
+caching, any database, the map/tile grid, and the frontend hostname
+remain open owner decisions (see
 [docs/architecture.md](docs/architecture.md)).
 
 ## Repository layout
@@ -122,20 +126,22 @@ database, and the frontend hostname are open owner decisions (see
 ```
 ├── bay_area_air_quality_episode_finder_overview.md   # Original project concept (source of truth)
 ├── docs/
-│   ├── methodology.md      # Working definitions, evidence framework, open TODOs
+│   ├── methodology.md      # Working definitions, decided methods, open TODOs
 │   ├── data-sources.md     # Candidate data sources (none final yet)
-│   ├── architecture.md     # Decided architecture + implemented backend infrastructure
+│   ├── architecture.md     # Decided architecture + implemented infrastructure status
+│   ├── ui-data-contract.md # Semantic data contract the production API/UI must follow
 │   └── roadmap.md          # Phased development plan
 ├── app/
-│   └── backend/            # Railway backend service (Earth Engine proof of connection; live)
-├── earthengine/            # Earth Engine exploration scripts 01–07 (Code Editor prototypes and audit exports)
+│   ├── backend/            # Railway backend service (Earth Engine proof of connection; live)
+│   └── frontend/           # Public UI shell (work in progress; not integrated or deployed)
+├── earthengine/            # Earth Engine scripts 01–07 (exploration prototypes and audit exports)
 ├── analysis/               # R supporting analysis (historical homogeneity audit notebook)
 └── landing-page/           # Superseded landing-page planning notes (application code lives under app/)
 ```
 
-The intended future frontend sibling is `app/frontend/`; it is not yet
-created, and the frontend framework and hostname are open owner
-decisions.
+The frontend framework and hostname remain open owner decisions; the
+current `app/frontend/` shell is an in-progress implementation, not a
+final stack choice.
 
 ## Documentation
 
@@ -145,9 +151,11 @@ decisions.
   "air-quality episode," the evidence framework, and open methodological TODOs
 - [Data sources](docs/data-sources.md) — candidate datasets under consideration
 - [Architecture](docs/architecture.md) — the decided Railway
-  full-application + Earth Engine architecture, including the
-  implemented backend infrastructure (frontend and production
-  application not built)
+  full-application + Earth Engine architecture, the implemented
+  backend infrastructure, and the in-progress frontend status
+- [UI data contract](docs/ui-data-contract.md) — the semantic data
+  concepts, null/status rules, and UI states the production API and
+  frontend must follow
 - [Roadmap](docs/roadmap.md) — development phases
 
 ## Geographic focus

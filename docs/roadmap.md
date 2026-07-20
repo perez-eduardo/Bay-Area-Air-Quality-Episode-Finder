@@ -97,10 +97,12 @@ Still open:
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
 - [ ] Remaining gate work (future, non-blocking for the next exploratory
-      feature): the final analysis scale and the R surface-monitor
-      validation workflow. The historical-homogeneity decision and the
-      baseline coverage rule were recorded 2026-07-19 — Outcome B and
-      the historical-baseline policy (see the gate status below and
+      feature): the public map/tile grid and any episode-spatial-analysis
+      grid decision, and the R surface-monitor validation workflow.
+      The historical-homogeneity decision and baseline policy were
+      recorded 2026-07-19 (Outcome B), and the production
+      regional-statistics method was selected 2026-07-20 after the
+      full-history 08b daily audit (see the gate status below and
       [methodology.md](methodology.md))
 
 ## Phase 1 — Basic app structure
@@ -170,6 +172,27 @@ spatial-extent rules are defined. Script 06 predates the full-window
 availability rule and is intentionally unchanged; implementing the
 decided policy in a user-facing feature is follow-up work.
 
+### Regional-statistics method audit and decision (completed 2026-07-20)
+
+- [x] Exploration 08a — native-grid pilot and projection-compatibility
+      audit (accepted v2): established exact-signature vs
+      compatible-lattice classification and the canonical-grid
+      calculation over four pilot windows
+- [x] Exploration 08b — full-history DAILY regional-method comparison
+      export: all nine yearly daily CSVs (2018–2026) and the manifest
+      are complete (2,934 requested local dates, none missing or
+      duplicated). The optional projection-summary batch export is
+      still running — non-blocking archival metadata, not required for
+      the method decision or the UI data contract
+- [x] Production regional-statistics method selected (2026-07-20): the
+      canonical native-lattice regional calculation; the legacy
+      EPSG:3310 / 7000 m reduction is reclassified as an
+      exploration/reference method (verified audit results, decision
+      details, and scope limits in [methodology.md](methodology.md)).
+      This does NOT decide the public map/tile grid, any
+      episode-spatial-analysis grid, or any episode threshold,
+      persistence, or spatial-extent rule
+
 ### Exploratory baseline and anomaly visualization (completed)
 
 - [x] Exploratory historical baseline and **satellite-column anomaly**
@@ -233,8 +256,9 @@ this fuller phase remains for the reproduction and methodology work below.
 ## Phase 5 — Railway public application and publishing
 
 **Architecture decided (2026-07-18); backend infrastructure implemented
-and live-tested (2026-07-19/20); the public application itself is NOT
-built.** Railway hosts the complete public application: browser →
+and live-tested (2026-07-19/20); frontend/UI implementation in progress
+(2026-07-20); production integration and public deployment are NOT
+done.** Railway hosts the complete public application: browser →
 Railway-hosted frontend → Railway backend/API → Google Earth Engine →
 statistics, map layers/tiles, and geospatial results. Earth Engine
 remains the geospatial processing engine; the previous plan (a Railway
@@ -277,20 +301,43 @@ Completed backend infrastructure (2026-07-19/20; details in
 - [x] Custom API domain `api.neuralnetworks.me` working with Railway
       TLS (Route 53 CNAME plus verification TXT record)
 
-Remaining application work (not started):
+Remaining application work:
 
-- [ ] Frontend service and framework (stack choice TODO); frontend
-      hostname (owner decision)
+- [ ] Frontend service — **in progress** (2026-07-20): an initial UI
+      shell exists at `app/frontend/` — a no-build static service
+      wired to the backend's infrastructure status endpoint, with a
+      vendored-Leaflet basemap and no data layer; **not** integrated
+      with production endpoints, deployed, or public. The final
+      frontend framework (TODO; the shell's no-framework approach is a
+      current implementation, not a decision) and the frontend
+      hostname (owner decision) remain open
 - [ ] Deploy the frontend/public application on Railway under the
       owner-selected frontend hostname (the backend Railway deployment
       and the `api.neuralnetworks.me` custom domain are complete —
       checked above)
 - [ ] Production scientific backend API endpoints for statistics, map
       layers/tiles, and geospatial results (endpoint design TODO — the
-      three proof endpoints are not the application API)
-- [ ] Public map/chart UI (map library TODO; charts, legends,
-      responsive layout, branding; loading/error UX beyond the proof
-      service)
+      three proof endpoints are not the application API; endpoints
+      must implement the semantics in
+      [ui-data-contract.md](ui-data-contract.md))
+- [ ] Implement the UI data contract
+      ([ui-data-contract.md](ui-data-contract.md)) end to end:
+      semantic response concepts, null/status semantics (a null
+      scientific value is never converted to numeric zero),
+      backend-supplied date availability (the date picker never
+      assumes "today" is available), and the labeling rules
+- [ ] Implement and test the documented UI states: loading; value with
+      complete baseline; value with structurally partial baseline; low
+      valid-area fraction (shown, never hidden); no products; products
+      but no valid retrieval; non-NOMINAL contributors present;
+      backend unavailable; Earth Engine unavailable; date newer than
+      the last included date
+- [ ] Public map/chart UI (map library TODO — the shell's vendored
+      Leaflet is a current implementation, not a decision; charts,
+      legends, responsive layout, branding; loading/error UX beyond
+      the proof service)
+- [ ] Public map rendering/tile grid and any episode-spatial-analysis
+      grid decision (NOT decided by the regional-statistics selection)
 - [ ] Caching/precomputation evaluation before public exposure —
       strengthened by script 06's slow dynamically stretched layers;
       includes the documented option of precomputing expensive

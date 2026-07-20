@@ -3,7 +3,8 @@
 This document records the project's working definitions and the planned
 evidence framework. It is a **planning draft** in which decided items are
 explicitly dated — most recently the historical-record homogeneity outcome
-and the historical-baseline policy (2026-07-19). No episode thresholds,
+and historical-baseline policy (2026-07-19) and the production
+regional-statistics method (2026-07-20). No episode thresholds,
 persistence rules, spatial-extent rules, or final
 episode-classification parameters have been decided. Anything
 undecided is marked TODO and will be decided by the project owner, not by
@@ -240,22 +241,35 @@ valid-area fraction = sum(valid pixel area) / total BAAQMD area
 The valid-area fraction must accompany **every** daily regional value:
 two identical regional means computed from 90 % and from 15 % of the
 region describe very different amounts of evidence, and baseline or
-anomaly logic that ignores coverage would silently mix them. Area
-weighting is documented as the leading scientifically defensible method
-and now has a completed, live-tested **exploratory** implementation
-(scripts 04–06, area-weighted regional means with valid-area
-fractions); final scientific adoption and validation remain open.
+anomaly logic that ignores coverage would silently mix them.
+**Status (2026-07-20): adopted.** The area-weighted regional mean with
+its valid-area fraction is the production regional statistic, computed
+on the canonical native lattice per the production
+regional-statistics method above (full decision, verified audit
+results, and scope limits in that section). The exploratory
+implementations in scripts 04–07 (EPSG:3310 / 7000 m) remain the
+documented exploration/reference path.
 
 ### Analysis grid and scale sensitivity
 
-7,000 m is **not** adopted as a final scale. **Planned:** a sensitivity
-study in an equal-area California projection at candidate scales such as
-5.5 km, 7 km, and 10 km, comparing: daily regional means; valid-area
-fractions; spatial patterns; number of usable days; anomaly rankings; and
-computational cost. The final scale remains an **Open** owner decision.
-The fine 0.01° grid may remain for display, with an explicit warning that
-it is oversampled and does not represent independent one-kilometre
-observations.
+**Status (2026-07-20).** The grid question is decided for the
+REGIONAL STATISTIC only: the production regional-statistics method
+(section above) computes on the canonical native L3 lattice
+(EPSG:4326, exact `crs` + `crsTransform`, no scale argument), selected
+after the full-history 08b daily audit. The legacy EPSG:3310 / 7000 m
+reduction is an exploration/reference configuration, not the
+production method. The previously planned 5.5/7/10 km equal-area
+sensitivity study was **not** performed and is no longer required for
+the regional statistic.
+
+Still **Open** (owner decisions, NOT settled by the regional-statistics
+selection): the public map rendering grid, map tile resolution, and
+visualization zoom behavior; and the grid for any eventual
+spatial-extent (episode) analysis. The fine 0.01° grid remains
+oversampled relative to the native TROPOMI footprint — neighboring
+cells are not independent one-kilometre observations, and the
+canonical reduction grid is not automatically the public map or
+episode-spatial-analysis grid.
 
 ### Calendar-day rule
 
@@ -369,7 +383,93 @@ statistics from partially represented windows. Script 06 is
 intentionally unchanged (exploration reference); any user-facing
 feature presenting official anomalies or percentiles must implement
 the full-window availability rule. No calculation or Earth Engine
-export script was modified as part of recording this decision.
+export script was modified as part of recording this decision. The
+UI-facing semantics of this policy (nullability, structural-partial
+handling, display rules) are specified in
+[ui-data-contract.md](ui-data-contract.md).
+
+## Production regional-statistics method (decided 2026-07-20)
+
+**Audit basis.** Exploration 08a (accepted v2 pilot) established the
+distinction between exact projection-signature identity and pixel-grid
+compatibility, validated the fixed canonical native-lattice
+calculation over four pilot windows, and defined the compatibility
+rule (equal CRS; x/y scale and shear within 1e-9; translation
+differences within 1e-6 of an integer pixel offset). Exploration 08b
+then exported the **full-history DAILY regional-method comparison**:
+all nine yearly daily CSVs (2018–2026) and the manifest are complete.
+The optional projection-summary batch export remains in progress and
+is **not required** for the regional-method decision or the frontend
+data contract — nothing below depends on it.
+
+**Verified full-history daily results (Observed; independently
+verified from the nine completed daily CSV exports):**
+
+- Study period 2018-06-28 through 2026-07-09 inclusive: 2,934
+  requested local calendar dates (America/Los_Angeles), no missing and
+  no duplicate requested dates; one explicit zero-product date
+  retained (2025-11-02).
+- Availability: legacy valid regional values on 2,791 days; native on
+  2,786; valid under both on 2,786. Availability changed on only
+  5 dates — on all five, the legacy method returned a value from
+  extremely small regional coverage (largest legacy valid-area
+  fraction among them ≈ 0.268 %) while the native method returned no
+  valid regional value.
+- Regional-value comparison: full-record Spearman rank correlation
+  ≈ 0.9717; median absolute relative regional-mean difference
+  ≈ 1.55 %; mean native-minus-legacy valid-area-fraction difference
+  ≈ −2.30 percentage points (native lower on 2,068 dates, equal on
+  835, higher on 31).
+- Projection setup validation (from the completed year-by-year
+  startup catalog of script 08b — not from the still-running
+  projection-summary export): 44 distinct exact projection signatures
+  observed, all 44 classified as ONE compatible pixel lattice; no
+  genuinely incompatible source projection found.
+
+**Adopted-baseline robustness (Observed; same source).** Using the
+adopted baseline policy on dates where both methods had a valid target
+value and a complete previous-three-year same-calendar-month window:
+1,775 comparable target dates; anomaly sign agreed on 1,680 of 1,775
+(≈ 94.65 %); median absolute percentile difference ≈ 2.30 percentile
+points; percentile ≥ 90 on 202 dates (legacy), 207 (native), 175
+(both). Interpretation: the two methods are strongly consistent
+overall but are **not interchangeable on every individual date**; the
+valid-area fraction must remain visible with every value; and one
+method must be used consistently in production.
+
+**Decision (project owner, 2026-07-20).** The selected production
+regional-statistics method is the **canonical native-lattice regional
+calculation**:
+
+- CRS `EPSG:4326` with affine transform
+  `[0.01, 0, -180, 0, 0.01, -90]`, used as the exact canonical
+  `crs` + `crsTransform` with **no scale argument**;
+- source signatures must satisfy the accepted 08a v2 compatibility
+  rule;
+- valid negative retrievals preserved; no hard valid-area cutoff; no
+  interpolation; no bestEffort;
+- the valid-area fraction is exposed with every value;
+- contributing non-NOMINAL products are retained and flagged.
+
+The legacy **EPSG:3310 / 7000 m** reduction is reclassified as an
+**exploration/reference method** — it remains the documented statistics
+path of exploration scripts 04–07 and the audit comparisons, and it is
+**not** the production regional-statistics method.
+
+**Scope limit.** This decision selects the regional-statistics
+reduction only. It does **not** select: the public map rendering grid;
+the map tile resolution; visualization zoom behavior; the eventual
+spatial-extent analysis grid; an episode threshold; a persistence
+rule; a spatial-extent rule; or any AQI or health interpretation. The
+canonical 0.01° reduction grid is not automatically the final public
+map or episode-spatial-analysis grid.
+
+**Reproducibility note.** The interactive year-by-year startup catalog
+counted 41,187 assets; the completed manifest sums to 41,192 yearly
+assets because the 2026 batch evaluation observed five additional
+within-window OFFL assets after task creation. This is consistent with
+asynchronous collection ingestion and does not change the date range,
+the compatibility result, or the method decision.
 
 ## Exploratory same-calendar-month historical median baseline (script 06)
 
@@ -551,9 +651,9 @@ visible and explainable in the app:
 | Temporal unit: daily compositing rule, same-date combination, missing-day representation | TODO — not decided (see [Temporal unit and daily compositing](#temporal-unit-and-daily-compositing-open)) |
 | Daily contributor definition (valid-pixel products only) and multi-product combination rule | TODO — not decided |
 | Minimum valid daily spatial coverage; daily quality/missingness reporting | **Decided (2026-07-19)** — no hard valid-area-fraction exclusion for the baseline; every valid retrieval retained with the fraction exposed (candidates evaluated retrospectively; they disproportionately removed winter observations); low-coverage display warnings remain an open convention |
-| Area-weighted regional statistics | TODO — exploratory implementation completed and live-tested (scripts 04–06, area-weighted means with valid-area fractions); final scientific adoption/validation still open |
-| Final analysis scale; explicit CRS/transform if required | TODO — sensitivity candidates 5.5/7/10 km, none adopted |
-| Regional reducer; pixel weighting, partial/masked pixels, boundary-edge behavior | TODO — an exploratory implementation exists (binary valid-pixel masks, area weighting, EPSG:3310 / 7000 m as exploration settings only); final configuration and validation not decided |
+| Area-weighted regional statistics | **Decided (2026-07-20)** — area-weighted regional mean with valid-area fraction, computed on the canonical native lattice (production regional-statistics method; full-history 08b daily audit) |
+| Regional-statistics grid; explicit CRS/transform | **Decided (2026-07-20)** — canonical native lattice, EPSG:4326 with exact `crs` + `crsTransform` `[0.01, 0, -180, 0, 0.01, -90]`, no scale argument. The public map rendering/tile grid and any episode-spatial-analysis grid remain TODO; the 5.5/7/10 km equal-area study was not performed |
+| Regional reducer; pixel weighting, partial/masked pixels, boundary-edge behavior | **Decided for the regional statistic (2026-07-20)** — binary valid-pixel masks, pixelArea weighting, canonical native lattice (legacy EPSG:3310 / 7000 m reclassified as exploration reference). Display/map-grid behavior remains open |
 | Non-nominal product exclusion/flagging rule | **Decided (2026-07-19)** — continue retaining and flagging days with contributing non-NOMINAL products (confirms the practical PRODUCT_QUALITY policy) |
 | Historical homogeneity handling (RPRO/OFFL, processor versions) | **Decided (2026-07-19)** — Outcome B: exploratory historical comparison with explicit restrictions; no exact version matching; no correction factors; changes disclosed (see the decided historical-baseline policy) |
 | Validation design (monitors, overpass timing, meteorological context) | TODO — datasets/providers not chosen |

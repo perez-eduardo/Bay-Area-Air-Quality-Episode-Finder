@@ -1,9 +1,13 @@
 # Earth Engine scripts
 
-**Status: data exploration in progress — six exploration scripts exist
-(01–06); script 06 is implemented and live-tested.** The dashboard app
-itself is not built yet, and no script detects or classifies air-quality
-episodes.
+**Status: exploration scripts 01–06 plus the audit-export script 07
+are tracked here; the Exploration 08a/08b regional-method audit work is
+COMPLETE (08a accepted; 08b's daily and manifest exports complete, its
+optional projection-summary export still running — non-blocking), but
+the 08a/08b script files are not yet committed to this repository.**
+The public dashboard app is not built (frontend work is in progress
+outside this directory), and no script detects or classifies
+air-quality episodes.
 
 **Decided:** everything here uses the Earth Engine JavaScript API and is
 developed and run through the Earth Engine Code Editor.
@@ -73,6 +77,36 @@ longer the planned final public architecture (a possible fallback only).
   below). **Exploration only** — the baseline is not a final
   climatology; no episode detection, health or AQI interpretation,
   thresholds, scoring, or modeling.
+- `exploration/07_s5p_no2_historical_homogeneity_export.js` — seventh
+  script (**completed**): yearly batch table exports (daily audit,
+  product metadata, manifest) covering the full OFFL record, feeding
+  the historical-record homogeneity audit in
+  `analysis/s5p_no2_historical_homogeneity.Rmd`. That audit closed
+  with the recorded Outcome B decision and baseline policy
+  (2026-07-19; see [docs/methodology.md](../docs/methodology.md)).
+  **Audit export only** — no baselines, anomalies, or episode logic
+  run in the script itself.
+- Exploration 08a — the pilot native-grid /
+  projection-compatibility audit (**accepted, v2**; its script file is
+  **not yet committed to this repository**). Over four fixed pilot
+  windows it compared the legacy EPSG:3310 / 7000 m statistics path
+  against a native-L3-lattice calculation, inventoried exact
+  projection signatures, and established the pixel-grid-compatibility
+  rule and the fixed canonical grid used by 08b. **Diagnostic only** —
+  selects nothing by itself.
+- Exploration 08b — the **full-history DAILY regional-method
+  comparison export** (both methods for every requested local date,
+  yearly batch partitions, plus a projection summary and manifest; its
+  script file is **not yet committed to this repository**). **All nine
+  yearly daily CSVs (2018–2026) and the manifest completed**; the
+  optional projection-summary batch export is still running and is
+  non-blocking archival metadata. On this audit's verified results the
+  owner selected the canonical native-lattice calculation as the
+  production regional-statistics method, with the legacy
+  EPSG:3310 / 7000 m path reclassified as an exploration/reference
+  method (results, decision, and scope limits in
+  [docs/methodology.md](../docs/methodology.md)). **Diagnostic
+  export only** — no thresholds, no episode logic.
 
 ## Running a script in the Code Editor
 
@@ -435,14 +469,19 @@ as universal dataset behavior:
 
 ## Next milestone
 
-The **exploratory historical baseline and satellite-column anomaly
-visualization** is implemented and live-tested (exploration 06 above) —
-still **not** Episode Finder classification, with no health or AQI
+The audit line through these scripts is complete: the homogeneity
+decision and baseline policy are recorded (script 07 + R notebook,
+2026-07-19), and the production regional-statistics method is selected
+after the full-history 08b daily comparison (2026-07-20) — still
+**not** Episode Finder classification, with no health or AQI
 interpretation, and anomalies clearly labeled as **satellite-column
-anomalies** (see [docs/roadmap.md](../docs/roadmap.md)).
+anomalies** (see [docs/roadmap.md](../docs/roadmap.md) and
+[docs/methodology.md](../docs/methodology.md)).
 
-The next major project phase is an explicit owner decision and has not
-been chosen. The Phase 1 app structure in
-[docs/roadmap.md](../docs/roadmap.md) — map, indicator selector, time
-series, placeholder episode summary, and visible methodology/limitations
-notes — remains the next app-structure milestone.
+Application work has moved to `app/` (backend proof of connection
+live; frontend UI shell in progress — see
+[docs/architecture.md](../docs/architecture.md) and
+[docs/ui-data-contract.md](../docs/ui-data-contract.md)). The scripts
+in this directory remain the scientific references whose processing
+logic may later be reorganized into backend modules (an open owner
+decision; not started).
