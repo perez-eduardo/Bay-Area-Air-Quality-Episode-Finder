@@ -740,11 +740,22 @@ test('static markup: no navigation bar or EP mark; one plain About ' +
   assert.match(css, /#aboutDialog::backdrop/);
 
   // Exact concise paragraph and footer texts.
-  assert.ok(flat.indexOf('Bay Area Air Quality Episode Finder is an ' +
-      'independent web application by Eduardo Perez for exploring ' +
+  assert.ok(flat.indexOf('Bay Area Air Quality Episode Finder grew ' +
+      'from an undergraduate data science project built with R and ' +
+      'Google Earth Engine. The current web application explores ' +
       'daily Sentinel-5P tropospheric NO₂ column anomalies across ' +
-      'the Bay Area. It provides historical comparison and data ' +
-      'coverage for each selected date.') !== -1);
+      'the Bay Area, with historical comparison and data coverage ' +
+      'for each selected date.') !== -1,
+      'exact About-modal paragraph is present');
+  // Origin and tools are stated in that one paragraph: no separate
+  // sections, and the exact product names.
+  assert.ok(flat.indexOf('undergraduate data science project') !== -1);
+  assert.match(flat, /built with R and Google Earth Engine/);
+  assert.ok(flat.indexOf('Google Earth Engine') !== -1);
+  // The previous About description is gone.
+  assert.equal(flat.indexOf('is an independent web application by ' +
+      'Eduardo Perez for exploring'), -1,
+      'previous About paragraph removed');
   assert.ok(flat.indexOf('© 2026 Eduardo Perez') !== -1);
   assert.ok(flat.indexOf('Independent project. Not affiliated with ' +
       'or endorsed by BAAQMD, EPA, Google, Copernicus, or ' +
@@ -913,8 +924,44 @@ test('the rail contains no dedicated Baseline method or Map layer ' +
   // The baseline is mentioned once, inside the compact map
   // explanation.
   var flat = html.replace(/\s+/g, ' ');
-  assert.ok(flat.indexOf('compared with the same calendar month in ' +
-      'the previous three years') !== -1);
+  assert.ok(flat.indexOf('the median of valid daily observations ' +
+      'from the same calendar month over the previous three years') !== -1);
+});
+
+test('the compact "About this layer" paragraph states the pixelwise ' +
+    'daily-median method exactly, without the vague monthly-window ' +
+    'wording', function () {
+  var html = fs.readFileSync(
+      path.join(__dirname, 'public', 'index.html'), 'utf8');
+  var flat = html.replace(/\s+/g, ' ');
+
+  // The exact corrected paragraph (whitespace-normalized).
+  assert.ok(flat.indexOf("Colors show the selected day's Sentinel-5P " +
+      'tropospheric NO₂ column anomaly. At each pixel, the anomaly ' +
+      "is the selected day's value minus the median of valid daily " +
+      'observations from the same calendar month over the previous ' +
+      'three years. The layer is smoothed for display and does not ' +
+      'represent ground-level concentration or AQI.') !== -1,
+      'exact corrected About-this-layer paragraph is present');
+
+  // The old sentence could read as a comparison with monthly
+  // averages; no trace of it may remain.
+  assert.equal(flat.indexOf('compared with the same calendar month'),
+      -1, 'vague comparison sentence removed');
+  // The pixel-level and daily-observation phrasing is explicit.
+  assert.ok(flat.indexOf('At each pixel') !== -1);
+  assert.ok(flat.indexOf('the median of valid daily observations') !== -1);
+});
+
+test('the rail shows the fixed Indicator value and the freshness ' +
+    'slot, without the "Fixed in this prototype." hint', function () {
+  var html = fs.readFileSync(
+      path.join(__dirname, 'public', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /Fixed in this prototype/);
+  assert.ok(html.indexOf('Tropospheric NO₂ column</p>') !== -1,
+      'static Indicator value remains');
+  // The backend-supplied freshness/date-availability slot remains.
+  assert.match(html, /id="freshnessNote"/);
 });
 
 test('null scientific values render as em dashes, never zero',

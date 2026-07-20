@@ -64,7 +64,6 @@
       <div class="fld">
         <span class="flabel" id="indicatorLabel">Indicator</span>
         <p class="ctl-static" aria-labelledby="indicatorLabel">Tropospheric NO₂ column</p>
-        <p class="hint">Fixed in this prototype.</p>
       </div>
 
       <div class="fld">
@@ -104,9 +103,10 @@
              explanation. -->
         <div class="howto">
           <h3>About this layer</h3>
-          <p>Colors show the selected day's Sentinel-5P tropospheric NO₂ column anomaly. The
-            selected date is compared with the same calendar month in the previous three
-            years. The layer is smoothed for display and does not represent ground-level
+          <p>Colors show the selected day's Sentinel-5P tropospheric NO₂ column anomaly. At
+            each pixel, the anomaly is the selected day's value minus the median of valid
+            daily observations from the same calendar month over the previous three years.
+            The layer is smoothed for display and does not represent ground-level
             concentration or AQI.</p>
         </div>
       </section>
@@ -209,10 +209,10 @@
       <button type="button" class="dlg-close" id="aboutClose"
               aria-label="Close About dialog">&#215;</button>
     </div>
-    <p class="dlg-text">Bay Area Air Quality Episode Finder is an independent web application
-      by Eduardo Perez for exploring daily Sentinel-5P tropospheric NO₂ column anomalies
-      across the Bay Area. It provides historical comparison and data coverage for each
-      selected date.</p>
+    <p class="dlg-text">Bay Area Air Quality Episode Finder grew from an undergraduate data
+      science project built with R and Google Earth Engine. The current web application
+      explores daily Sentinel-5P tropospheric NO₂ column anomalies across the Bay Area,
+      with historical comparison and data coverage for each selected date.</p>
     <ul class="contact-list">
       <li>
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5h18v14H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 6l9 7 9-7" fill="none" stroke="currentColor" stroke-width="2"/></svg>
