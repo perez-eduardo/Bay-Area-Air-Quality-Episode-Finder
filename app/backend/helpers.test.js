@@ -316,6 +316,28 @@ test('quality: null/undefined metadata is unknown, like (missing)',
   assert.equal(summary.unknownProductQualityCount, 2);
 });
 
+/* --------------------------------------- display-only boundary clip */
+
+test('clipForDisplay clips a NEW display image and leaves the ' +
+    'scientific image untouched', function () {
+  var clipCalls = [];
+  var scientificImage = {
+    clip: function (geometry) {
+      clipCalls.push(geometry);
+      return {clippedTo: geometry};      // a distinct display object
+    }
+  };
+  var geom = {label: 'official BAAQMD geometry'};
+  var display = pure.clipForDisplay(scientificImage, geom);
+  // The display path is image.clip(officialGeometry)…
+  assert.deepEqual(clipCalls, [geom]);
+  assert.deepEqual(display, {clippedTo: geom});
+  // …and the original (statistics/percentiles) image is not replaced,
+  // masked, or mutated — clipping affects the displayed tiles only.
+  assert.notEqual(display, scientificImage);
+  assert.deepEqual(Object.keys(scientificImage), ['clip']);
+});
+
 /* -------------------------------------- overall-deadline budget */
 
 test('deadline budget: sub-operation caps clamp to remaining time',

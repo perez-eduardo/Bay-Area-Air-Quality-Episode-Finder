@@ -42,6 +42,13 @@
     mapCenter: [37.75, -122.15],
     mapZoom: 8,
 
+    // Opacity for every SCIENTIFIC raster tile layer (0.45, decided
+    // for this correction): low enough that basemap roads, shorelines,
+    // and labels stay readable underneath. The signed column anomaly
+    // is currently the only scientific raster layer. Basemap and
+    // boundary-line opacity are not governed by this value.
+    scientificRasterOpacity: 0.45,
+
     /*
      * Outer browser timeouts. Each is deliberately LONGER than the
      * matching backend bound (app/backend/analysis.js CONSTANTS:
@@ -228,6 +235,27 @@
   var boundaryFitted = false;      // fit to the boundary exactly once
   var satelliteTileLayer = null;   // single reference; never stacked
 
+  /*
+   * Truthful tile-rendering lifecycle. Attaching an Earth Engine tile
+   * URL to Leaflet is NOT the same as displaying a rendered tile —
+   * the first tile can take tens of seconds server-side. The layer
+   * therefore has its own state, derived from real Leaflet tile
+   * events, with a generation token so events from a removed layer
+   * can never update the state of a newer one:
+   *   none      — no scientific layer exists;
+   *   rendering — layer attached, no tile outcome yet;
+   *   displayed — at least one tile rendered, none failed;
+   *   partial   — tiles rendered, but one or more failed;
+   *   failed    — tile errors before any successful tile.
+   */
+  var tileGeneration = 0;
+  var tileState = {status: 'none', loaded: 0, errored: 0};
+
+  function resetTileState() {
+    tileGeneration += 1;             // invalidates removed-layer events
+    tileState = {status: 'none', loaded: 0, errored: 0};
+  }
+
   function initMap() {
     if (typeof L === 'undefined' || !el('map')) return;
     leafletMap = L.map('map', {
@@ -257,6 +285,9 @@
         fillOpacity: 0.02, interactive: false
       }
     }).addTo(leafletMap);
+    // If a scientific raster is already on the map (boundary retry),
+    // the official outline still goes above it.
+    if (boundaryLayer.bringToFront) boundaryLayer.bringToFront();
     if (!boundaryFitted) {
       try {
         leafletMap.fitBounds(boundaryLayer.getBounds(),
@@ -266,18 +297,25 @@
     }
   }
 
-  // Removes the scientific layer. Called before adding a new date's
-  // layer and on EVERY unavailable/error state so stale anomaly tiles
-  // never linger under a message that says otherwise.
+  // Removes the scientific layer and resets the tile lifecycle.
+  // Called before adding a new date's layer and on EVERY
+  // unavailable/error/date-changing state so stale anomaly tiles never
+  // linger under a message that says otherwise. Handlers are detached
+  // and the generation token advances, so a removed layer's late tile
+  // events are doubly inert.
   function removeAnomalyLayer() {
-    if (leafletMap && satelliteTileLayer) {
-      leafletMap.removeLayer(satelliteTileLayer);
+    if (satelliteTileLayer) {
+      if (satelliteTileLayer.off) satelliteTileLayer.off();
+      if (leafletMap) leafletMap.removeLayer(satelliteTileLayer);
     }
     satelliteTileLayer = null;
+    resetTileState();
   }
 
   // Adds the anomaly tile layer for a successful date. Refuses to run
-  // without a real tile URL template: nothing is ever fabricated.
+  // without a real tile URL template: nothing is ever fabricated. The
+  // layer starts in 'rendering' state; only real tileload/tileerror
+  // events move it forward.
   function setAnomalyLayer(mapBlock) {
     if (!leafletMap || !mapBlock ||
         typeof mapBlock.tileUrlTemplate !== 'string' ||
@@ -285,11 +323,37 @@
       return false;
     }
     removeAnomalyLayer();
+    var generation = tileGeneration;   // this layer's identity
+    tileState = {status: 'rendering', loaded: 0, errored: 0};
+
+    function onTileEvent(kind) {
+      return function () {
+        if (generation !== tileGeneration) return; // removed layer
+        if (kind === 'load') tileState.loaded += 1;
+        else tileState.errored += 1;
+        var next = tileState.loaded > 0 ?
+            (tileState.errored > 0 ? 'partial' : 'displayed') :
+            (tileState.errored > 0 ? 'failed' : 'rendering');
+        if (next !== tileState.status) {
+          tileState.status = next;
+          render();
+        }
+      };
+    }
+
     satelliteTileLayer = L.tileLayer(mapBlock.tileUrlTemplate, {
-      opacity: 0.75,
+      opacity: CONFIG.scientificRasterOpacity,
       attribution: mapBlock.attribution ||
           'Contains modified Copernicus Sentinel data'
-    }).addTo(leafletMap);
+    });
+    satelliteTileLayer.on('tileload', onTileEvent('load'));
+    satelliteTileLayer.on('tileerror', onTileEvent('error'));
+    satelliteTileLayer.addTo(leafletMap);
+    // The official boundary outline must stay visible above the
+    // scientific raster.
+    if (boundaryLayer && boundaryLayer.bringToFront) {
+      boundaryLayer.bringToFront();
+    }
     return true;
   }
 
@@ -419,10 +483,31 @@
     var map = a.data.map;
     switch (map.status) {
       case 'available':
-        return 'Sentinel-5P tropospheric NO₂ column anomaly layer ' +
-            'loaded. Local date ' + map.localDate + '; unit ' +
-            map.unit + '. Per-date display stretch — colour intensity ' +
-            'is not comparable across dates.';
+        // Truthful lifecycle: a tile URL attached to Leaflet is not a
+        // displayed layer. The wording follows real tile events.
+        switch (tileState.status) {
+          case 'rendering':
+            return 'Rendering anomaly tiles… First Earth Engine tile ' +
+                'rendering can take tens of seconds.';
+          case 'displayed':
+            return 'Anomaly layer displayed. Local date ' +
+                map.localDate + '; unit ' + map.unit + '. Per-date ' +
+                'display stretch — colour intensity is not ' +
+                'comparable across dates.';
+          case 'partial':
+            return 'Anomaly layer partially rendered — ' +
+                tileState.errored + ' tile request(s) failed; ' +
+                'successfully rendered tiles remain visible. Local ' +
+                'date ' + map.localDate + '; unit ' + map.unit +
+                '. Per-date display stretch — colour intensity is ' +
+                'not comparable across dates.';
+          case 'failed':
+            return 'Anomaly tile rendering failed — the tile service ' +
+                'returned errors before any tile rendered. The ' +
+                'observation and baseline values above stand.';
+          default:
+            return 'Anomaly layer state: ' + tileState.status + '.';
+        }
       case 'baseline_unavailable':
         return 'Anomaly map unavailable — complete three-year ' +
             'historical baseline is not available for this date.';
@@ -446,11 +531,52 @@
     }
   }
 
+  // Normalizes one backend palette entry to a CSS hex colour with a
+  // leading '#'. Returns null for anything that is not a hex colour —
+  // no replacement colour is ever invented client-side.
+  function normalizePaletteColor(value) {
+    if (typeof value !== 'string') return null;
+    var hex = value.charAt(0) === '#' ? value.slice(1) : value;
+    if (!/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(hex)) {
+      return null;
+    }
+    return '#' + hex;
+  }
+
+  /*
+   * One continuous CSS gradient derived from the backend palette
+   * stops, distributed evenly from 0% to 100% (the backend supplies
+   * no explicit stop positions today). The anomaly is a continuous
+   * variable; the stops are interpolation control points, never
+   * categories. Because the backend range is symmetric, the ramp
+   * midpoint (50%) is zero by construction. Returns null when any
+   * entry is not interpretable — the caller then shows a truthful
+   * legend-unavailable state instead of inventing a palette.
+   * NOTE: this smooths the LEGEND only; the map raster keeps its
+   * blocky 0.01° display-grid appearance.
+   */
+  function legendGradientCss(paletteStops) {
+    if (!paletteStops || !paletteStops.length) return null;
+    var colors = [];
+    for (var i = 0; i < paletteStops.length; i++) {
+      var color = normalizePaletteColor(paletteStops[i]);
+      if (color === null) return null;
+      colors.push(color);
+    }
+    var pieces = [];
+    for (var k = 0; k < colors.length; k++) {
+      var pct = colors.length === 1 ? 50 :
+          (100 * k / (colors.length - 1));
+      pieces.push(colors[k] + ' ' + (Math.round(pct * 100) / 100) + '%');
+    }
+    return 'linear-gradient(to right, ' + pieces.join(', ') + ')';
+  }
+
   /*
    * Legend renderer. Renders ONLY from backend visualization metadata
    * (minimum, maximum, palette stops, description): no fixed palette,
    * numeric limits, or thresholds are invented client-side. Shows the
-   * exact min, zero, and max of the per-date stretch.
+   * exact min, a centered zero, and the max of the per-date stretch.
    */
   function renderLegend() {
     var legend = nodes.legend;
@@ -469,6 +595,16 @@
       return;
     }
     var map = a.data.map;
+    var gradient = legendGradientCss(vis.paletteStops);
+    if (gradient === null) {
+      var unavailable = document.createElement('span');
+      unavailable.className = 'bmeta';
+      unavailable.textContent = 'Anomaly legend unavailable — the ' +
+          'backend palette metadata could not be interpreted. No ' +
+          'replacement palette is invented; map tiles are unaffected.';
+      legend.appendChild(unavailable);
+      return;
+    }
     var title = document.createElement('span');
     title.className = 'bmeta';
     title.textContent = 'Signed column anomaly (' + map.unit + ') — ' +
@@ -486,16 +622,13 @@
     rampWrap.className = 'ramp-wrap';
     var ramp = document.createElement('div');
     ramp.className = 'ramp';
+    ramp.style.background = gradient;
     ramp.setAttribute('role', 'img');
     ramp.setAttribute('aria-label',
-        'Anomaly colour ramp from backend visualization metadata, ' +
-        'from ' + fmtSci(vis.min) + ' through zero to ' +
-        '+' + fmtSci(vis.max) + ' ' + map.unit);
-    for (var i = 0; i < vis.paletteStops.length; i++) {
-      var cell = document.createElement('i');
-      cell.style.background = '#' + String(vis.paletteStops[i]);
-      ramp.appendChild(cell);
-    }
+        'Continuous anomaly colour gradient from backend ' +
+        'visualization metadata, from ' + fmtSci(vis.min) +
+        ' through zero at the midpoint to +' + fmtSci(vis.max) +
+        ' ' + map.unit);
     rampWrap.appendChild(ramp);
     var zero = document.createElement('span');
     zero.className = 'rlab rzero';
@@ -513,7 +646,8 @@
     note.className = 'bmeta';
     note.textContent = vis.description ||
         'Per-date display stretch from backend metadata, not a ' +
-        'threshold.';
+        'threshold; colour intensity is not directly comparable ' +
+        'across dates.';
     legend.appendChild(note);
   }
 

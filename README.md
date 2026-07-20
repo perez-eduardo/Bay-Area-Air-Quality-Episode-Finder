@@ -19,18 +19,22 @@ planned feature of the dashboard, not the only one.
 > compatible source lattice), the **canonical native-lattice regional
 > calculation** is the selected production regional-statistics method
 > (details and verified results in
-> [docs/methodology.md](docs/methodology.md)). The **first vertical
-> slice** is implemented in the repository: backend API routes for
-> one-local-date observation, the adopted three-year baseline, and
-> the signed satellite column-anomaly map, plus a one-date frontend
-> consuming them — **implemented and locally tested, but not
-> deployed**; the live backend still runs the earlier
-> proof-of-connection build, and no scientific result is publicly
-> served yet. The historical-record homogeneity audit is complete
-> with the recorded Outcome B baseline policy — still not episode
-> classification, with no health or AQI interpretation (see
+> [docs/methodology.md](docs/methodology.md)). The **one-date public
+> prototype is live**: the frontend at
+> <https://airquality.neuralnetworks.me> and the backend API at
+> <https://api.neuralnetworks.me> serve one-local-date observation,
+> the adopted three-year baseline, and the signed satellite
+> column-anomaly map (display tiles clipped to the official BAAQMD
+> boundary). Observation, baseline, Earth Engine map creation, and
+> live tiles have been verified against real Earth Engine data; cold
+> analyses and first tile rendering can take noticeable time, while
+> repeat requests are served fast from the backend cache. The
+> historical-record homogeneity audit is complete with the recorded
+> Outcome B baseline policy — still not episode classification, with
+> no health or AQI interpretation (see
 > [docs/roadmap.md](docs/roadmap.md)). No current feature detects or
-> classifies episodes.
+> classifies episodes; daily-series and episode criteria remain
+> future work.
 
 ## What this project is
 

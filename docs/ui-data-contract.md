@@ -1,13 +1,16 @@
 # UI data contract (semantics)
 
 **Status: adopted semantic contract for the public UI (2026-07-20);
-implemented by the first vertical slice (2026-07-20).** This document
-defines the **meaning** of the data the frontend consumes and the
-states it must present. The first vertical slice implements it with
-three owner-decided endpoints — `GET /api/context`,
-`GET /api/boundary`, and `GET /api/analysis?date=YYYY-MM-DD` (concrete
-schemas in `app/backend/README.md`; implemented in the repository, not
-yet deployed). This semantic contract remains the authority: if an
+implemented and deployed (2026-07-20) — frontend live at
+<https://airquality.neuralnetworks.me>, backend live at
+<https://api.neuralnetworks.me>.** This document defines the
+**meaning** of the data the frontend consumes and the states it must
+present. The deployed application implements it with three
+owner-decided endpoints — `GET /api/context`, `GET /api/boundary`,
+and `GET /api/analysis?date=YYYY-MM-DD` (concrete schemas in
+`app/backend/README.md`; observation, baseline, map creation, and
+tiles live-verified against real Earth Engine data). This semantic
+contract remains the authority: if an
 implementation detail and this document disagree, this document and
 [methodology.md](methodology.md) win. The backend is the authority for
 date availability and null/status semantics; the frontend must consume

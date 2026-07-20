@@ -1,14 +1,15 @@
-# Railway backend — API service (first vertical slice)
+# Railway backend — API service
 
-**Status: first vertical slice implemented in the repository
-(2026-07-20); live verification pending deployment.** This service
-implements the first production API surface — one-local-date
-Sentinel-5P tropospheric NO₂ column observation, the adopted
-three-year baseline, and the signed column-anomaly map metadata — on
-the decided methods in `docs/methodology.md`. The **deployed** Railway
-service still runs the earlier proof-of-connection build until this
-version is pushed and redeployed; do not describe the new routes as
-live until that has been done and verified.
+**Status: deployed and live-verified (2026-07-20) at
+<https://api.neuralnetworks.me>.** This service implements the first
+production API surface — one-local-date Sentinel-5P tropospheric NO₂
+column observation, the adopted three-year baseline, and the signed
+column-anomaly map metadata — on the decided methods in
+`docs/methodology.md`. Observation, baseline, Earth Engine map
+creation, and live tiles have been verified against real Earth Engine
+data; the public frontend consuming this API is live at
+<https://airquality.neuralnetworks.me>. The application remains a
+one-date public prototype.
 
 Nothing here classifies air-quality episodes, and nothing in any
 response is an AQI value, a surface concentration, or health advice.
@@ -208,6 +209,14 @@ visualization stretch is per-date display only.
   the pixelwise median of the valid historical daily composites; tile
   URL obtained via the async `getMapId`/`getMap` path; credentials are
   never exposed.
+- **Display-only boundary clip**: the image handed to the tile
+  service is the anomaly image clipped to the official BAAQMD
+  geometry, so rendered tiles stop at the jurisdiction (outside
+  pixels are masked/transparent). The clip is applied **only** at the
+  tile step — regional statistics, the baseline, and the
+  visualization percentiles all use the un-clipped anomaly image, and
+  the anomaly values, palette, and robust stretch are unchanged. No
+  buffering, no geometry simplification, no interpolation.
 
 ## Caching (in-memory only; no database)
 
@@ -298,7 +307,7 @@ backend; after deploying this version, verify `/healthz`,
 | `EE_SERVICE_ACCOUNT_KEY` | Service-account JSON key contents (preferred on Railway) |
 | `EE_SERVICE_ACCOUNT_KEY_FILE` | Path to the JSON key file (convenient locally) |
 | `EE_PROJECT_ID` | Earth Engine Cloud project ID (default `thematic-carver-502603-k5`) |
-| `ALLOWED_ORIGINS` | Comma-separated browser origins granted CORS read access. **When set, it replaces the code defaults** (the Railway value currently does exactly that). `http://localhost:8081` and `http://127.0.0.1:8081` are always appended for local development. **TODO:** once the frontend hostname is chosen, its exact origin must be added to this Railway variable or the browser will show the backend as unreachable. |
+| `ALLOWED_ORIGINS` | Comma-separated browser origins granted CORS read access. **When set, it replaces the code defaults** (the Railway value currently does exactly that, and includes the live frontend origin `https://airquality.neuralnetworks.me`). `http://localhost:8081` and `http://127.0.0.1:8081` are always appended for local development. |
 
 If both key variables are set, `EE_SERVICE_ACCOUNT_KEY` wins.
 
@@ -307,13 +316,14 @@ If both key variables are set, `EE_SERVICE_ACCOUNT_KEY` wins.
 - A cold-cache `/api/analysis` request evaluates roughly three months
   of historical daily reductions plus visualization percentiles and a
   tile lookup in a few large Earth Engine round trips; the first
-  request for a date can take minutes. The bounded caches make repeat
-  requests fast; precomputation is the documented future mitigation
-  and has not been designed.
-- The Earth Engine-backed behavior of the new routes (real
-  observation/baseline values, live tile URLs) can only be verified
-  through credentials — locally with a key file, or on the Railway
-  deployment. The credential-free paths (boot, 503 schemas,
-  validation, caching, pure helpers) are covered by local tests.
+  request for a date can take minutes (live-observed: ~1 minute for
+  the default date). The bounded caches make repeat requests fast
+  (live-observed: sub-second); precomputation is the documented
+  future mitigation and has not been designed.
+- Earth Engine renders map tiles on demand: the **first** tile of a
+  fresh map can itself take tens of seconds (live-observed ~30 s)
+  even when the analysis response was cached. The frontend reports
+  this truthfully ("Rendering anomaly tiles…" until a real tile
+  loads).
 - No rate limiting or per-client quotas exist yet; the API is public
   and unauthenticated.

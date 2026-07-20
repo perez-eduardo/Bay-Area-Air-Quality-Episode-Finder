@@ -309,41 +309,42 @@ Completed backend infrastructure (2026-07-19/20; details in
 
 Remaining application work:
 
-- [x] First vertical slice implemented in the repository (2026-07-20;
-      **not deployed — live verification pending**): the backend API
+- [x] First application slice implemented and **deployed** (2026-07-20;
+      live-verified against real Earth Engine data): the backend API
       (`/api/context`, `/api/boundary`, `/api/analysis?date=`)
       implements the decided canonical native-lattice observation,
       the adopted three-year baseline, and the signed column-anomaly
-      map with a per-date robust display stretch; the frontend
-      analyzes one local calendar date at a time with the official
-      boundary, backend-driven date bounds, a
-      backend-metadata-only legend, and the documented null/status
-      states. Node built-in `http` for both services, no-build
-      frontend, vendored Leaflet 1.9.4, OpenStreetMap basemap, no
-      database, bounded in-memory caches only — all retained by owner
-      decision for this slice
-- [ ] Frontend hostname (owner decision) and the final frontend
-      framework decision remain open (the slice's no-framework
-      approach is a current implementation, not a decision)
-- [ ] Deploy the updated backend and the frontend on Railway under
-      the owner-selected frontend hostname, add the frontend origin
-      to the backend's `ALLOWED_ORIGINS` variable (it overrides the
-      code defaults), and verify the new routes and UI live (the
-      backend Railway deployment and the `api.neuralnetworks.me`
-      custom domain are complete — checked above)
+      map with a per-date robust display stretch (display tiles
+      clipped to the official BAAQMD boundary — display-only, never
+      the statistics); the frontend analyzes one local calendar date
+      at a time with the official boundary, backend-driven date
+      bounds, a backend-metadata-only continuous-gradient legend,
+      truthful Leaflet tile-event rendering states, and the
+      documented null/status states. Node built-in `http` for both
+      services, no-build frontend, vendored Leaflet 1.9.4,
+      OpenStreetMap basemap, no database, bounded in-memory caches
+      only — all retained by owner decision for this slice
+- [ ] The final frontend framework decision remains open (the
+      prototype's no-framework approach is a current implementation,
+      not a decision)
+- [x] Deploy both services on Railway: backend live at
+      `api.neuralnetworks.me`, frontend live at
+      `airquality.neuralnetworks.me`, CORS allowlist configured;
+      observation, baseline, Earth Engine map creation, and tiles
+      verified live (cold analyses and first tile rendering take
+      noticeable time; warm backend analysis-cache responses are
+      fast)
 - [x] Production scientific backend API endpoints for statistics and
-      map tiles — first slice implemented in the repo (2026-07-20),
-      following the semantics in
-      [ui-data-contract.md](ui-data-contract.md); not yet deployed or
-      live-verified
+      map tiles — implemented, deployed, and live-verified
+      (2026-07-20), following the semantics in
+      [ui-data-contract.md](ui-data-contract.md)
 - [x] Implement the UI data contract
       ([ui-data-contract.md](ui-data-contract.md)) end to end in the
       slice: semantic response concepts, null/status semantics (a null
       scientific value is never converted to numeric zero),
       backend-supplied date availability (the date picker never
       assumes "today" is available), and the labeling rules
-      (implemented and locally tested 2026-07-20; live verification
-      pending deployment)
+      (implemented 2026-07-20; live-verified after deployment)
 - [x] Implement and test the documented UI states: loading; value with
       complete baseline; value with structurally partial baseline; low
       valid-area fraction (shown, never hidden); no products; products
@@ -351,8 +352,9 @@ Remaining application work:
       backend unavailable; Earth Engine unavailable; date outside the
       supported range; projection incompatible; visualization
       unavailable; timeout (implemented and locally exercised
-      2026-07-20; Earth Engine-backed states still need live
-      verification after deployment)
+      2026-07-20; the default-date Earth Engine-backed path —
+      observation, baseline, map, tiles — verified live after
+      deployment)
 - [ ] Public chart UI (charting approach TODO; the daily-series view
       is deferred — this slice analyzes one date at a time; the map
       UI, legend, responsive layout, and loading/error UX exist in

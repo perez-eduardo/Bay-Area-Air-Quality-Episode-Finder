@@ -1,18 +1,17 @@
-# Architecture (decided; backend infrastructure live, first vertical slice implemented, not deployed)
+# Architecture (decided; both services deployed and live-verified)
 
 Planned components and how they fit together. The public-application
-architecture below is an owner decision (2026-07-18). The **backend
-infrastructure — a proof of connection — is implemented and running**
-(live-tested 2026-07-19/20; details below). The **first vertical
-slice is implemented in the repository (2026-07-20)**: the backend
-API routes (`/api/context`, `/api/boundary`, `/api/analysis?date=`)
-implementing the decided regional statistic, baseline, and signed
-column-anomaly map, plus a one-date frontend consuming them (see the
-frontend/API status sections). The slice is **not deployed**: the
-live Railway backend still runs the earlier proof-of-connection
-build, the frontend service is not deployed at all, and no new route
-has been live-verified. Nothing public exposes scientific results
-yet.
+architecture below is an owner decision (2026-07-18). **Both services
+are deployed and live (2026-07-20)**: the backend API
+(`/api/context`, `/api/boundary`, `/api/analysis?date=`) at
+<https://api.neuralnetworks.me> implementing the decided regional
+statistic, baseline, and signed column-anomaly map, and the one-date
+public frontend at <https://airquality.neuralnetworks.me> consuming
+it. Observation, baseline, Earth Engine map creation, and live tiles
+have been verified against real Earth Engine data. The public
+application remains a **one-date prototype**: no episode
+classification exists, and daily-series and episode criteria remain
+future work.
 
 ## Decision status
 
@@ -226,16 +225,15 @@ a valid-regional-data claim.
 
 ### Still not implemented or verified
 
-Deployment of the first vertical slice (the live backend still runs
-the proof build; the frontend service has never been deployed); the
-frontend hostname and its `ALLOWED_ORIGINS` entry; live verification
-of the new Earth Engine-backed routes and of the UI against real
-data; the chart/daily-series UI; precomputation; episode
-classification of any kind.
+The chart/daily-series UI; precomputation (cold analyses and first
+Earth Engine tile rendering take noticeable time — live-observed
+~1 minute and ~30 s respectively — while warm backend analysis-cache
+responses are sub-second); rate limiting; episode classification of
+any kind.
 
-## First vertical slice — implemented API and UI (2026-07-20)
+## First application slice — deployed API and UI (2026-07-20)
 
-### Backend API (implemented in the repository; not deployed)
+### Backend API (deployed at api.neuralnetworks.me)
 
 `app/backend/` now implements the first production API surface on the
 decided methods (canonical native-lattice regional statistic; adopted
@@ -249,8 +247,11 @@ display stretch):
 - `GET /api/boundary` — the official BAAQMD boundary as GeoJSON
   (dissolved; no county fallback; cached for the process lifetime);
 - `GET /api/analysis?date=YYYY-MM-DD` — one-local-date observation,
-  baseline comparison, and anomaly-map metadata with tile URL;
-  successful responses cached in memory (max 20 dates, ~1 hour TTL);
+  baseline comparison, and anomaly-map metadata with tile URL (the
+  tile image is the anomaly clipped to the official BAAQMD boundary —
+  display-only; statistics and visualization percentiles use the
+  un-clipped image); successful responses cached in memory (max 20
+  dates, ~1 hour TTL);
 - structured errors: 400 malformed date; 422 outside the supported
   range; 503 Earth Engine not ready; 502 upstream failure; 504
   upstream timeout; 500 unexpected — while scientifically unavailable
@@ -261,9 +262,13 @@ display stretch):
   `node:test` unit tests for the pure helpers. Full schemas in
   `app/backend/README.md`.
 
-### Frontend (implemented in the repository; not deployed)
+### Frontend (deployed at airquality.neuralnetworks.me)
 
-`app/frontend/` implements the one-date public UI slice:
+`app/frontend/` implements the one-date public UI (scientific raster
+opacity 0.45 via one named configuration value; anomaly tile status
+follows real Leaflet tile events — "Rendering anomaly tiles…" until
+the first tile actually loads; the legend is a continuous gradient
+derived from backend palette metadata):
 
 - page flow: context → boundary → automatic analysis of the backend's
   default date; a single `<input type="date">` bounded by the
@@ -332,10 +337,9 @@ Division of responsibilities:
   accounts), loading and error states, caching, charts, legends,
   responsive layout, branding, and custom-domain hosting. Backend
   authentication and backend deployment are implemented (proof stage,
-  above); the first-slice API, in-memory caching, and one-date
-  frontend are implemented in the repository (2026-07-20) but not
-  deployed; charts and everything beyond one date at a time remain
-  future work.
+  above); the one-date API, in-memory caching, and one-date frontend
+  are implemented and deployed (2026-07-20); charts and everything
+  beyond one date at a time remain future work.
 - **GitHub repository.** Documentation, exploration scripts, and the
   application code under `app/` (`app/backend/` and `app/frontend/`).
 - **R notebook(s) (`analysis/`).** Supporting analysis and validation,

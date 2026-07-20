@@ -15,7 +15,7 @@
 
 <a class="skip" href="#main">Skip to content</a>
 
-<div class="stage-note"><div class="wrap">First vertical slice — one-local-date satellite-column analysis served by the backend API. Implemented, not yet publicly deployed. No feature classifies air-quality episodes.</div></div>
+<div class="stage-note"><div class="wrap">Public prototype — one-date satellite-column analysis. No feature currently classifies air-quality episodes.</div></div>
 
 <div class="origin">
   <div class="wrap">
@@ -28,9 +28,9 @@
   <div class="wrap">
     <p class="eyebrow">Earth observation · evidence dashboard</p>
     <h1>Bay Area Air Quality Episode Finder</h1>
-    <p class="standfirst">Satellite evidence for examining whether an air-quality episode may have
-      happened or may be developing, with the reasoning, the coverage, and the limits of each
-      measurement shown alongside the result.</p>
+    <p class="standfirst">Satellite evidence for examining unusual daily tropospheric NO₂ column
+      patterns, with coverage, historical context, and limitations shown alongside each
+      result.</p>
   </div>
 </div>
 
@@ -49,12 +49,6 @@
 
 <main id="main">
 <div class="wrap">
-  <div class="advisory">
-    <b>Sentinel-5P measures a tropospheric vertical column, not the air at ground level.</b>
-    Column amount and the concentration a person breathes are different physical quantities.
-    Nothing here is an AQI value, a health category, or an episode declaration.
-  </div>
-
   <div class="shell">
 
     <aside class="rail">
@@ -108,12 +102,19 @@
         <div class="legend" id="anomalyLegend">
           <span class="bmeta">Anomaly legend renders from backend visualization metadata when the layer loads.</span>
         </div>
-        <p class="map-state">Layer identification: <b>Sentinel-5P tropospheric NO₂ column anomaly</b>
-          — the signed difference between the selected day's column and the pixelwise historical
-          median for the same calendar month (previous three years). The 0.01° display grid is
-          oversampled relative to the TROPOMI sensor footprint — neighbouring display cells are
-          not independent 1&nbsp;km observations. This layer is not surface concentration, AQI,
-          health advice, or an episode classification.</p>
+        <!-- The consolidated scientific reading guide for the map: one
+             compact panel instead of repeated caveat boxes. -->
+        <div class="howto">
+          <h3>How to read this map</h3>
+          <p>The layer is the <b>Sentinel-5P tropospheric NO₂ column anomaly</b> — the selected
+            day's column minus the pixelwise historical median for the same calendar month over
+            the previous three years. Sentinel-5P measures a vertical column through the
+            troposphere, not the air at ground level: nothing on this map is an AQI value,
+            health advice, or an episode classification. The 0.01° display grid is oversampled
+            relative to the TROPOMI sensor footprint, so neighbouring display cells are not
+            independent 1&nbsp;km observations. Colours use a per-date display stretch — not a
+            threshold — and colour intensity is not directly comparable across dates.</p>
+        </div>
       </section>
 
       <section class="block">
@@ -188,30 +189,14 @@
           trend.</p>
       </section>
 
-      <section class="block">
+      <section class="block notyet">
         <div class="bhead">
-          <h2 class="btitle">Daily series against baseline</h2>
-          <span class="bmeta">Future work — not part of this slice</span>
+          <h2 class="btitle">What this prototype does not yet assess</h2>
         </div>
-        <div class="empty">
-          <p class="elabel">No series in this slice</p>
-          <p class="ehelp">This slice analyzes one local calendar date at a time. A daily series
-            view is deferred future work; when built, gaps will be missing days, never
-            interpolated.</p>
-        </div>
-      </section>
-
-      <section class="block">
-        <div class="bhead">
-          <h2 class="btitle">Episode assessment</h2>
-          <span class="bmeta">Not implemented</span>
-        </div>
-        <p style="margin:0;max-width:72ch;color:var(--gray-dark);font-size:15px">
-          No feature in this project classifies air-quality episodes. Doing so requires
-          persistence and spatial-extent criteria, corroborating ground-monitor evidence, and
-          meteorological context, none of which is defined yet. Until then this dashboard
-          reports satellite-column anomalies and the coverage behind them, and stops there.
-        </p>
+        <p>This application does not yet evaluate persistence across days, spatial-extent
+          criteria, ground-monitor corroboration, or meteorological context, and it performs no
+          episode classification. It reports one date's satellite-column evidence — with its
+          coverage and historical context — and stops there.</p>
       </section>
 
     </div>

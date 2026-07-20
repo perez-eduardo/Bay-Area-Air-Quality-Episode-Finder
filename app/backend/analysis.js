@@ -337,6 +337,18 @@ function propOrMissing(image, name) {
       CONSTANTS.missingToken);
 }
 
+// DISPLAY-ONLY boundary clip: masks every pixel outside the official
+// BAAQMD geometry so rendered map tiles stop at the jurisdiction.
+// Applied exclusively to the image handed to the tile service — never
+// to the images used for regional statistics, the baseline, or the
+// visualization percentiles, which all stay un-clipped. No buffering,
+// no simplification, no value change, no interpolation. Kept as a
+// named helper so the display path is testable apart from the
+// scientific path.
+function clipForDisplay(image, geometry) {
+  return image.clip(geometry);
+}
+
 // Fully masked placeholder so a zero-product date still yields a
 // well-formed zero-valid-area reduction. No interpolation anywhere.
 function placeholderImage() {
@@ -909,9 +921,13 @@ function getAnalysis(dateStr) {
           analysisCache.set(dateStr, noVis);
           return noVis;
         }
+        // The tile service receives the CLIPPED display image; the
+        // statistics and the percentiles above used the un-clipped
+        // anomalyImage. Clipping changes rendered extent only.
+        var anomalyDisplayImage = clipForDisplay(anomalyImage, geom);
         var tileMs = budget(CONSTANTS.mapTimeoutMs);
         var tilePromise = tileMs > 0 ?
-            eeClient.getMapUrl(anomalyImage, {
+            eeClient.getMapUrl(anomalyDisplayImage, {
               min: -range,
               max: range,
               palette: CONSTANTS.paletteStops
@@ -1033,6 +1049,7 @@ module.exports = {
     createBoundedCache: createBoundedCache,
     createDeadlineBudget: createDeadlineBudget,
     canonicalGridCheck: canonicalGridCheck,
-    qualitySummary: qualitySummary
+    qualitySummary: qualitySummary,
+    clipForDisplay: clipForDisplay
   }
 };

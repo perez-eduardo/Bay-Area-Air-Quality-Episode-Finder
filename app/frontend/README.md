@@ -1,14 +1,18 @@
 # Railway frontend — public UI
 
-**Status: first vertical slice implemented in the repository
-(2026-07-20); not yet deployed or public.** The UI analyzes **one Bay
-Area local calendar date at a time** against the backend API
-(`/api/context`, `/api/boundary`, `/api/analysis`), draws the official
-BAAQMD boundary, and displays the signed Sentinel-5P tropospheric NO₂
-column-anomaly layer with a backend-supplied legend. It presents the
-backend's null/status semantics exactly (`docs/ui-data-contract.md`) —
-a null scientific value is never rendered as zero, and nothing here
-fabricates data, thresholds, or layers.
+**Status: live (2026-07-20) at
+<https://airquality.neuralnetworks.me>**, consuming the live backend
+at <https://api.neuralnetworks.me>. The UI is a **one-date public
+prototype**: it analyzes **one Bay Area local calendar date at a
+time** against the backend API (`/api/context`, `/api/boundary`,
+`/api/analysis`), draws the official BAAQMD boundary, and displays
+the signed Sentinel-5P tropospheric NO₂ column-anomaly layer (display
+tiles clipped server-side to the official boundary) with a
+backend-supplied legend. It presents the backend's null/status
+semantics exactly (`docs/ui-data-contract.md`) — a null scientific
+value is never rendered as zero, and nothing here fabricates data,
+thresholds, or layers. No feature classifies air-quality episodes;
+daily-series and episode criteria remain future work.
 
 ## Stack decision (delegated, 2026-07-19; retained 2026-07-20)
 
@@ -51,11 +55,11 @@ runtime dependencies. OpenStreetMap remains the basemap.
 ### Still open
 
 The charting approach for a future daily-series view is **not**
-decided (this slice deliberately has no series); the binding
+decided (this prototype deliberately has no series); the binding
 requirement remains that missing days render as gaps and are never
-interpolated. The **frontend hostname** is an open owner decision, and
-once chosen its exact origin must be added to the backend's
-`ALLOWED_ORIGINS` Railway variable.
+interpolated. The frontend hostname decision is settled: the UI is
+live at `https://airquality.neuralnetworks.me`, and that origin is in
+the backend's `ALLOWED_ORIGINS` Railway variable.
 
 ## What this service does
 
@@ -102,10 +106,36 @@ may legitimately take minutes; only repeat requests are fast.
 
 One boundary layer reference and one anomaly tile layer reference. A
 new successful date replaces the anomaly layer (never stacked); every
-unavailable/error state removes stale anomaly tiles; the basemap is
-never removed. The legend renders exclusively from backend
-visualization metadata (exact min, zero, max; palette stops; the
-per-date-stretch warning; layer date and unit).
+unavailable/error/date-changing state removes stale anomaly tiles and
+clears the legend immediately; the basemap and boundary are never
+removed, and the boundary outline is brought above the raster.
+
+**Scientific raster opacity is a single named configuration value,
+0.45** (`CONFIG.scientificRasterOpacity`), applied to every
+scientific raster layer — the signed column anomaly is currently the
+only one. Basemap and boundary-line opacity are unaffected.
+
+**Truthful tile-rendering states.** Attaching an Earth Engine tile
+URL to Leaflet is not a displayed layer — the first tile can take
+tens of seconds to render server-side. The layer state is driven by
+real Leaflet tile events with a generation token (events from a
+removed layer are inert): *rendering* ("Rendering anomaly tiles…")
+until the first `tileload`; *displayed* ("Anomaly layer displayed.")
+after it; *partial* when `tileerror` occurs after at least one
+successful tile (loaded tiles are retained); *failed* when errors
+arrive before any tile succeeds.
+
+**Continuous-gradient legend.** The legend renders exclusively from
+backend visualization metadata: one continuous CSS `linear-gradient`
+built from the backend `paletteStops` (evenly distributed 0–100%; no
+colour is ever hardcoded or invented client-side), the exact backend
+min and max, and a zero marker at the ramp midpoint (the backend
+range is symmetric, so 50% is zero). An uninterpretable backend
+palette produces a truthful legend-unavailable message without
+blocking the tiles. The gradient smooths the **legend only** — the
+map raster keeps its blocky 0.01° display-grid appearance, because
+neighbouring cells are oversampled values, not independent
+fine-resolution observations.
 
 ### Implemented UI states
 
@@ -116,8 +146,21 @@ partial baseline; low valid-area fraction (displayed as-is — no hidden
 cutoff exists); no products; products but no valid retrieval;
 non-NOMINAL contributors (flagged, value retained); projection
 incompatible; visualization unavailable; date outside the supported
-range; request timeout. Null values render as an em dash with the
-scientific reason — never as 0.
+range; request timeout; and the tile-rendering lifecycle (rendering /
+displayed / partial / failed) driven by real Leaflet tile events.
+Null values render as an em dash with the scientific reason — never
+as 0.
+
+## Tests
+
+`npm test` runs `ui-harness.test.js` — a Node `node:test` harness
+that drives the real `public/app.js` with stubbed DOM/Leaflet/fetch
+and asserts the map lifecycle: the 0.45 raster opacity, truthful
+tileload/tileerror states, stale-layer and stale-legend removal on
+date changes, removed-layer event isolation, the single-scientific-
+layer rule, boundary-above-raster, the continuous-gradient legend,
+the legend-unavailable state for an uninterpretable palette, and
+null-never-zero rendering. No browser or network is involved.
 
 ## Environment variables
 
@@ -145,18 +188,15 @@ a credentialed backend it loads the default date automatically.
 This is the **second** service in the existing Railway project, beside
 `backend`.
 
-1. In the Railway project, add a service from the same GitHub repo.
-2. Set **Root Directory** to `app/frontend`.
-3. Set the variable `BACKEND_ORIGIN` to `https://api.neuralnetworks.me`.
-4. Generate a domain, or attach the chosen frontend hostname (still an
-   open owner decision; the apex and `www` of `neuralnetworks.me` are
-   already in use by another site).
+The service is live: Root Directory `app/frontend`, variable
+`BACKEND_ORIGIN=https://api.neuralnetworks.me`, custom domain
+**`airquality.neuralnetworks.me`**, auto-deployed from GitHub `main`.
 
-**Required after the frontend origin exists:** add that exact origin
-to the backend's `ALLOWED_ORIGINS` Railway variable. The variable
-**replaces** the code defaults when set, and the backend grants
-cross-origin browser access by allowlist — a frontend on an unlisted
-origin will load but show the backend as unreachable.
+The frontend origin is present in the backend's `ALLOWED_ORIGINS`
+Railway variable. That variable **replaces** the code defaults when
+set, and the backend grants cross-origin browser access by allowlist
+— a frontend on an unlisted origin would load but show the backend as
+unreachable.
 
 ## Accessibility and quality floor
 
