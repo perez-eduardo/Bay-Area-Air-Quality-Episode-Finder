@@ -1,0 +1,14 @@
+{
+  "name": "baaqef-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bay Area Air Quality Episode Finder - Railway frontend service. Serves the public UI's static files. No build step; no runtime dependencies. Leaflet is vendored under public/vendor/.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

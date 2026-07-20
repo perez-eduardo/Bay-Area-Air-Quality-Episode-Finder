@@ -1,0 +1,182 @@
+/* ---------------------------------------------------------------------
+   Bay Area Air Quality Episode Finder — public UI styles.
+
+   Palette: NASA Web Design System published tokens.
+   Type: NASA Horizon Design System stack — Inter (headings),
+         Public Sans (body), DM Mono (numerical and technical data).
+   --------------------------------------------------------------------- */
+
+:root {
+  --primary:          #105bd8;
+  --primary-darker:   #0b3d91;   /* insignia blue */
+  --primary-darkest:  #061f4a;
+  --base:             #212121;
+  --gray-dark:        #323a45;
+  --gray:             #5b616b;
+  --gray-light:       #aeb0b5;
+  --gray-lighter:     #d6d7d9;
+  --gray-lightest:    #f1f1f1;
+  --cool-light:       #dce4ef;
+  --alt-darkest:      #046b99;
+  --alt-lightest:     #e1f3f8;
+  --secondary:        #dd361c;
+  --secondary-dark:   #c62d1f;
+  --secondary-light:  #f9e0de;
+  --green:            #2e8540;
+  --white:            #ffffff;
+
+  /* Exploration script 06's diverging anomaly ramp, reused unchanged so
+     the legend matches the documented display convention. */
+  --a1:#2166ac; --a2:#92c5de; --a3:#f7f7f7; --a4:#f4a582; --a5:#b2182b;
+
+  --display: 'Inter', system-ui, sans-serif;
+  --body:    'Public Sans', system-ui, sans-serif;
+  --mono:    'DM Mono', ui-monospace, monospace;
+
+  --edge: 1px solid var(--gray-lighter);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--white);
+  color: var(--base);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+.skip {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--primary-darkest); color: var(--white);
+  padding: 10px 16px; z-index: 1000;
+}
+.skip:focus { left: 0; }
+
+/* --------------------------------------------------- provenance strip
+   Federal sites open with an "official website" banner. This project is
+   explicitly not an official source, so the pattern's position and
+   restraint are kept and the content is inverted to say so. */
+.origin { background: var(--gray-lightest); border-bottom: var(--edge); font-size: 12.5px; color: var(--gray-dark); }
+.origin .wrap { display: flex; align-items: center; gap: 10px; padding-top: 7px; padding-bottom: 7px; flex-wrap: wrap; }
+.origin b { color: var(--base); }
+.flag { display: inline-block; width: 3px; height: 15px; background: var(--secondary); flex: none; }
+
+/* ----------------------------------------------------------- masthead */
+.masthead { background: var(--primary-darkest); color: var(--white); }
+.masthead .wrap { padding-top: 30px; padding-bottom: 30px; }
+.eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: #9fc0e8; margin: 0 0 12px; }
+h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; letter-spacing: -.021em; line-height: 1.08; margin: 0 0 12px; max-width: 24ch; }
+.standfirst { font-size: 16.5px; font-weight: 300; color: #cddcf0; max-width: 64ch; margin: 0; }
+
+/* --------------------------------------------------- instrument strip */
+.instrument { border-bottom: var(--edge); }
+.instrument .wrap { display: flex; flex-wrap: wrap; padding-top: 0; padding-bottom: 0; }
+.icell { padding: 11px 26px 11px 0; margin-right: 26px; border-right: var(--edge); display: flex; align-items: baseline; gap: 9px; white-space: nowrap; }
+.icell:last-child { border-right: 0; margin-right: 0; }
+.ikey { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--gray); font-weight: 600; }
+.ival { font-family: var(--mono); font-size: 13px; }
+.ival.pending { color: var(--gray-light); }
+.ival.flagged { color: var(--alt-darkest); }
+.ival.bad { color: var(--secondary-dark); }
+.ival.good { color: var(--green); }
+
+/* ----------------------------------------------------------- advisory */
+.advisory { border-left: 4px solid var(--secondary); background: var(--secondary-light); padding: 13px 18px; margin-top: 24px; font-size: 14.5px; max-width: 88ch; }
+
+/* -------------------------------------------------------------- shell */
+.shell { display: grid; grid-template-columns: 290px minmax(0,1fr); border-top: var(--edge); margin-top: 26px; align-items: start; }
+@media (max-width: 940px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { border-right: 0; border-bottom: var(--edge); padding-right: 0; }
+  .work { padding-left: 0; }
+}
+
+/* --------------------------------------------------------------- rail */
+.rail { border-right: var(--edge); padding: 22px 24px 30px 0; }
+.rail-head { font-family: var(--display); font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gray-dark); margin: 0 0 18px; padding-bottom: 10px; border-bottom: var(--edge); }
+.fld { margin-bottom: 19px; }
+.fld > label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-dark); margin-bottom: 6px; }
+.ctl { width: 100%; background: var(--white); border: 1px solid var(--gray-light); border-radius: 0; color: var(--base); font-family: var(--mono); font-size: 13.5px; padding: 9px 10px; }
+.ctl:focus-visible { outline: 3px solid var(--primary); outline-offset: 0; }
+.ctl[disabled] { background: var(--gray-lightest); color: var(--gray); }
+.hint { font-size: 12px; color: var(--gray); margin: 6px 0 0; line-height: 1.45; }
+.pair { display: flex; gap: 8px; }
+.pair .ctl { min-width: 0; }
+.go { width: 100%; background: var(--primary); color: var(--white); border: 0; border-radius: 0; padding: 12px; font-family: var(--body); font-size: 14px; font-weight: 700; cursor: pointer; }
+.go:hover:not([disabled]) { background: var(--primary-darker); }
+.go:focus-visible { outline: 3px solid var(--base); outline-offset: 2px; }
+.go[disabled] { background: var(--gray-light); cursor: not-allowed; }
+
+/* --------------------------------------------------------------- work */
+.work { padding: 22px 0 0 26px; }
+.block { padding-bottom: 26px; margin-bottom: 26px; border-bottom: var(--edge); }
+.block:last-child { border-bottom: 0; }
+.bhead { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.btitle { font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase; color: var(--primary-darker); margin: 0; }
+.bmeta { font-size: 12.5px; color: var(--gray); }
+
+/* ---------------------------------------------------------------- map */
+#map { height: 380px; border: 1px solid var(--gray-lighter); background: var(--gray-lightest); }
+.leaflet-container { font-family: var(--body); }
+.map-state {
+  border: 1px solid var(--gray-lighter); border-top: 0;
+  background: var(--alt-lightest); color: var(--alt-darkest);
+  font-family: var(--mono); font-size: 12px; padding: 8px 12px;
+}
+
+/* ------------------------------------------------------------ legend */
+.legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.ramp { display: flex; height: 13px; width: 200px; border: 1px solid var(--gray-light); }
+.ramp i { flex: 1; }
+.rlab { font-family: var(--mono); font-size: 11px; color: var(--gray); }
+
+/* ----------------------------------------------------------- readouts */
+.readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px,1fr)); gap: 16px; }
+.ro { border: var(--edge); border-top: 3px solid var(--primary-darker); padding: 15px 16px 14px; }
+.rokey { font-size: 12px; font-weight: 600; color: var(--gray-dark); margin: 0 0 9px; }
+.roval { font-family: var(--mono); font-size: 26px; font-weight: 500; line-height: 1; margin: 0; }
+.roval.awaiting { color: var(--gray-light); }
+
+/* The provenance rail: every number states the chain that produced it
+   and the claim it does not support. */
+.prov { margin-top: 12px; padding-top: 9px; border-top: var(--edge); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--gray); }
+.prov span { display: block; }
+.prov .no { color: var(--secondary-dark); }
+
+/* -------------------------------------------------------- empty state */
+.empty {
+  border: 1px solid var(--gray-lighter);
+  background:
+    repeating-linear-gradient(0deg,  transparent 0 31px, #e8ecf3 31px 32px),
+    repeating-linear-gradient(90deg, transparent 0 31px, #e8ecf3 31px 32px),
+    #fafbfd;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 28px; min-height: 175px;
+}
+.elabel { font-family: var(--mono); font-size: 12.5px; color: var(--gray-dark); margin: 0; }
+.ehelp { font-size: 13.5px; color: var(--gray); max-width: 44ch; margin: 7px 0 0; }
+
+/* ------------------------------------------------------- limitations */
+.limits { background: var(--cool-light); border-top: var(--edge); margin-top: 34px; }
+.limits .wrap { padding-top: 34px; padding-bottom: 38px; }
+.limits h2 { font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase; color: var(--primary-darkest); margin: 0 0 20px; }
+.lgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(252px,1fr)); gap: 22px 32px; }
+.lim h3 { font-family: var(--display); font-size: 14.5px; font-weight: 700; color: var(--primary-darker); margin: 0 0 5px; }
+.lim p { margin: 0; font-size: 14px; color: var(--gray-dark); line-height: 1.5; }
+
+/* ------------------------------------------------------------ footer */
+footer { background: var(--primary-darkest); color: #cddcf0; }
+footer .wrap { padding-top: 24px; padding-bottom: 30px; display: flex; gap: 26px; flex-wrap: wrap; font-size: 13.5px; }
+footer a { color: var(--white); text-decoration: underline; text-underline-offset: 3px; }
+footer a:hover { color: #9fc0e8; }
+footer .attrib { font-family: var(--mono); font-size: 12px; }
+
+.stage-note { background: var(--alt-lightest); border-bottom: var(--edge); font-family: var(--mono); font-size: 11.5px; color: var(--alt-darkest); }
+.stage-note .wrap { padding-top: 6px; padding-bottom: 6px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

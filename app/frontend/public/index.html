@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bay Area Air Quality Episode Finder</title>
+<meta name="description" content="An independent Earth-observation evidence dashboard for Bay Area air quality. Not an official air-quality advisory.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Public+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="stage-note"><div class="wrap">Frontend proof of connection — the interface shell is wired to the backend's status endpoint. No analysis runs yet.</div></div>
+
+<div class="origin">
+  <div class="wrap">
+    <span class="flag"></span>
+    <span><b>Not an official air-quality source.</b> An independent analysis project. For advisories, see AirNow, BAAQMD, or EPA.</span>
+  </div>
+</div>
+
+<div class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">Earth observation · evidence dashboard</p>
+    <h1>Bay Area Air Quality Episode Finder</h1>
+    <p class="standfirst">Satellite evidence for examining whether an air-quality episode may have
+      happened or may be developing, with the reasoning, the coverage, and the limits of each
+      measurement shown alongside the result.</p>
+  </div>
+</div>
+
+<!-- Values marked "pending" are filled from the backend at load time.
+     Nothing here is hardcoded except the instrument and product names. -->
+<div class="instrument">
+  <div class="wrap">
+    <div class="icell"><span class="ikey">Instrument</span><span class="ival">Sentinel-5P TROPOMI</span></div>
+    <div class="icell"><span class="ikey">Product</span><span class="ival" id="i-product">pending</span></div>
+    <div class="icell"><span class="ikey">Region</span><span class="ival" id="i-region">pending</span></div>
+    <div class="icell"><span class="ikey">Latest local date</span><span class="ival pending" id="i-latest">pending</span></div>
+    <div class="icell"><span class="ikey">Publication lag</span><span class="ival pending" id="i-lag">pending</span></div>
+    <div class="icell"><span class="ikey">Backend</span><span class="ival pending" id="i-backend">checking…</span></div>
+  </div>
+</div>
+
+<main id="main">
+<div class="wrap">
+  <div class="advisory">
+    <b>Sentinel-5P measures a tropospheric vertical column, not the air at ground level.</b>
+    Column amount and the concentration a person breathes are different physical quantities.
+    Nothing here is an AQI value, a health category, or an episode declaration.
+  </div>
+
+  <div class="shell">
+
+    <aside class="rail">
+      <p class="rail-head">Run parameters</p>
+
+      <div class="fld">
+        <label for="indicator">Indicator</label>
+        <select id="indicator" class="ctl"><option>NO₂ tropospheric column</option></select>
+        <p class="hint">PM2.5 is out of scope. Any future PM2.5 work would be an estimate
+          workflow, never a direct satellite observation.</p>
+      </div>
+
+      <div class="fld">
+        <label for="startDate">Target period</label>
+        <div class="pair">
+          <input id="startDate" class="ctl" value="2026-07-03" aria-label="Start date" inputmode="numeric">
+          <input id="endDate" class="ctl" value="2026-07-10" aria-label="End date" inputmode="numeric">
+        </div>
+        <p class="hint">Local dates, America/Los_Angeles. End date is exclusive.</p>
+      </div>
+
+      <div class="fld">
+        <label for="layer">Map layer</label>
+        <select id="layer" class="ctl">
+          <option>Target-period mean column</option>
+          <option>Historical monthly median</option>
+          <option>Signed anomaly — fixed scale</option>
+          <option>Signed anomaly — detail stretch</option>
+          <option>Historical valid-day count</option>
+        </select>
+      </div>
+
+      <div class="fld">
+        <label for="histYears">Historical years</label>
+        <input id="histYears" class="ctl" value="3" aria-label="Historical years" inputmode="numeric">
+        <p class="hint">Same calendar month, prior years only. The target year and future
+          dates are never used.</p>
+      </div>
+
+      <button class="go" type="button" id="runButton" disabled>Run comparison</button>
+      <p class="hint" id="runHint">Analysis endpoints are not built yet. This control is
+        inactive until the production API exists.</p>
+    </aside>
+
+    <div class="work">
+
+      <section class="block">
+        <div class="bhead">
+          <h2 class="btitle">Map</h2>
+          <span class="bmeta">Display processing only, never feeds the statistics</span>
+        </div>
+        <div id="map" role="region" aria-label="Study region map"></div>
+        <p class="map-state" id="mapState">Basemap only — no data layer is loaded.</p>
+        <div class="legend">
+          <span class="bmeta">Signed anomaly</span>
+          <span class="rlab">below median</span>
+          <div class="ramp" role="img" aria-label="Diverging colour ramp, blue through white to red">
+            <i style="background:var(--a1)"></i><i style="background:var(--a2)"></i>
+            <i style="background:var(--a3)"></i><i style="background:var(--a4)"></i>
+            <i style="background:var(--a5)"></i>
+          </div>
+          <span class="rlab">above median</span>
+          <span class="bmeta">Colour is a display stretch, not a threshold</span>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="bhead">
+          <h2 class="btitle">Readouts</h2>
+          <span class="bmeta" id="readoutState">Awaiting a run</span>
+        </div>
+        <div class="readouts">
+          <div class="ro">
+            <p class="rokey">Regional mean column</p>
+            <p class="roval awaiting">—</p>
+            <div class="prov">
+              <span>TROPOMI → L3 grid → daily composite → area-weighted mean</span>
+              <span class="no">not a surface concentration</span>
+            </div>
+          </div>
+          <div class="ro">
+            <p class="rokey">Signed anomaly</p>
+            <p class="roval awaiting">—</p>
+            <div class="prov">
+              <span>target mean − same-month median, prior 3 years</span>
+              <span class="no">not an episode declaration</span>
+            </div>
+          </div>
+          <div class="ro">
+            <p class="rokey">Percentile in history</p>
+            <p class="roval awaiting">—</p>
+            <div class="prov">
+              <span>share of historical days at or below target</span>
+              <span class="no">descriptive reference only</span>
+            </div>
+          </div>
+          <div class="ro">
+            <p class="rokey">Valid-area coverage</p>
+            <p class="roval awaiting">—</p>
+            <div class="prov">
+              <span>valid pixel area ÷ region area, per day</span>
+              <span class="no">reported always, never used to exclude</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="bhead">
+          <h2 class="btitle">Daily series against baseline</h2>
+          <span class="bmeta">Gaps are missing days, never interpolated</span>
+        </div>
+        <div class="empty">
+          <p class="elabel">No series loaded</p>
+          <p class="ehelp">The daily series renders here once the production API exists.</p>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="bhead">
+          <h2 class="btitle">Episode assessment</h2>
+          <span class="bmeta">Not implemented</span>
+        </div>
+        <p style="margin:0;max-width:72ch;color:var(--gray-dark);font-size:15px">
+          No feature in this project classifies air-quality episodes. Doing so requires
+          persistence and spatial-extent criteria, corroborating ground-monitor evidence, and
+          meteorological context, none of which is defined yet. Until then this dashboard
+          reports satellite-column anomalies and the coverage behind them, and stops there.
+        </p>
+      </section>
+
+    </div>
+  </div>
+</div>
+</main>
+
+<section class="limits">
+  <div class="wrap">
+    <h2>Known limits of this measurement</h2>
+    <div class="lgrid">
+      <div class="lim">
+        <h3>Column, not ground level</h3>
+        <p>The instrument measures NO₂ through the depth of the troposphere. That is a
+          different physical quantity from what a monitor at street level records.</p>
+      </div>
+      <div class="lim">
+        <h3>Grid is finer than the footprint</h3>
+        <p>The 0.01° product grid is oversampled relative to the native footprint of roughly
+          3.5 × 5.5 km. Neighbouring cells are not independent kilometre-scale measurements.</p>
+      </div>
+      <div class="lim">
+        <h3>Coverage varies by day</h3>
+        <p>Cloud and retrieval quality decide how much of the region is seen. Identical means
+          from 90% and 15% coverage describe very different amounts of evidence, so coverage
+          travels with every number.</p>
+      </div>
+      <div class="lim">
+        <h3>The record is not uniform</h3>
+        <p>Processor and algorithm versions change through the archive. This is a rolling
+          comparison against recent same-month history, not a homogeneous long-term trend.</p>
+      </div>
+      <div class="lim">
+        <h3>Spatial coincidence is not cause</h3>
+        <p>A pattern that lines up with a highway or a facility is geography, not attribution.
+          This product cannot assign column values to a road segment or a site.</p>
+      </div>
+      <div class="lim">
+        <h3>No surface validation yet</h3>
+        <p>Comparison against BAAQMD and EPA surface monitors, overpass timing, and
+          meteorological context remains future work.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/perez-eduardo/Bay-Area-Air-Quality-Episode-Finder">Source and documentation</a>
+    <a href="https://github.com/perez-eduardo/Bay-Area-Air-Quality-Episode-Finder/blob/main/docs/methodology.md">Methodology</a>
+    <a href="https://github.com/perez-eduardo/Bay-Area-Air-Quality-Episode-Finder/blob/main/docs/data-sources.md">Data sources</a>
+    <span class="attrib">Contains modified Copernicus Sentinel data</span>
+  </div>
+</footer>
+
+<script>window.BACKEND_ORIGIN = '__BACKEND_ORIGIN__';</script>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

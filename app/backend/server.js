@@ -84,7 +84,24 @@ var CONFIG = {
   timeZone: 'America/Los_Angeles',
 
   // Upper bound for one diagnostic Earth Engine round trip.
-  eeCallTimeoutMs: 60000
+  eeCallTimeoutMs: 60000,
+
+  /*
+   * Browser origins permitted to read this API cross-origin. The
+   * frontend is a separate Railway service on a different origin, so
+   * the browser requires an explicit grant. An allowlist is used rather
+   * than a wildcard: these endpoints are public and unauthenticated
+   * today, but a wildcard would silently keep granting access to any
+   * origin if authenticated or rate-limited endpoints are added later.
+   * Extra origins can be supplied through ALLOWED_ORIGINS as a
+   * comma-separated list.
+   */
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ||
+      'https://neuralnetworks.me,https://www.neuralnetworks.me')
+      .split(',')
+      .map(function (value) { return value.trim(); })
+      .filter(function (value) { return value.length > 0; })
+      .concat(['http://localhost:8081', 'http://127.0.0.1:8081'])
 };
 
 // Fixed language for every response. Careful-claims policy
@@ -265,6 +282,18 @@ function runEeCheck() {
 
 /* -------------------------------------------------------------- HTTP LAYER */
 
+// Grants cross-origin read access to allowlisted browser origins only.
+// Requests without an Origin header (curl, server-to-server, health
+// probes) are unaffected: they never needed the grant.
+function applyCors(req, res) {
+  var origin = req.headers.origin;
+  if (origin && CONFIG.allowedOrigins.indexOf(origin) !== -1) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    // The response varies by request origin, so caches must key on it.
+    res.setHeader('Vary', 'Origin');
+  }
+}
+
 function sendJson(res, statusCode, body) {
   var payload = JSON.stringify(body, null, 2);
   res.writeHead(statusCode, {
@@ -276,6 +305,18 @@ function sendJson(res, statusCode, body) {
 
 var server = http.createServer(function (req, res) {
   var path = req.url.split('?')[0];
+
+  applyCors(req, res);
+
+  // Preflight: only simple GETs are served, but browsers may still ask.
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Max-Age': '86400'
+    });
+    res.end();
+    return;
+  }
 
   if (req.method !== 'GET') {
     sendJson(res, 405, {error: 'Only GET is supported.'});
