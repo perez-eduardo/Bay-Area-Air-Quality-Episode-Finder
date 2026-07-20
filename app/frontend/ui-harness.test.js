@@ -66,11 +66,26 @@ function makeNode(id) {
 function makeLeafletStub() {
   var mapObj = {
     layers: [],
+    panes: {},
+    handlers: {},
     removeLayer: function (layer) {
       var i = mapObj.layers.indexOf(layer);
       if (i !== -1) mapObj.layers.splice(i, 1);
     },
     fitBounds: function () {},
+    createPane: function (name) {
+      mapObj.panes[name] = {style: {}};
+      return mapObj.panes[name];
+    },
+    getPane: function (name) { return mapObj.panes[name] || null; },
+    getZoom: function () { return mapObj._zoom; },
+    _zoom: 8,
+    on: function (evt, fn) {
+      (mapObj.handlers[evt] = mapObj.handlers[evt] || []).push(fn);
+    },
+    fireMap: function (evt) {
+      (mapObj.handlers[evt] || []).slice().forEach(function (fn) { fn({}); });
+    },
     _add: function (layer) { mapObj.layers.push(layer); }
   };
   var L = {
@@ -323,6 +338,33 @@ test('raster opacity is exactly 0.45 and the basemap stays fully ' +
   })[0];
   assert.ok(basemap);
   assert.equal(basemap.options.opacity, undefined); // Leaflet default 1
+  settleAll(); await flush();
+});
+
+test('display-only smoothing: the anomaly layer rides its own pane ' +
+    'with a zoom-scaled CSS blur; the basemap pane is untouched',
+    async function () {
+  var env = await bootToAnalysis();
+  var pane = env.map.panes.anomaly;
+  assert.ok(pane, 'anomaly pane created');
+  assert.equal(pane.style.zIndex, 250);          // below vector overlay
+  assert.match(pane.style.filter, /^blur\([\d.]+px\)$/);
+  var sci = sciLayersOnMap(env)[0];
+  assert.equal(sci.options.pane, 'anomaly');     // filter hits it alone
+  var basemap = tileLayersOnMap(env).filter(function (l) {
+    return l.url.indexOf('openstreetmap') !== -1;
+  })[0];
+  assert.equal(basemap.options.pane, undefined); // basemap: default pane
+  // Blur scales with zoom (factor 1.5, clamped 4-12 px):
+  // z8 cell ~1.82px -> 2.73 -> min clamp 4px; z10 -> ~10.9px;
+  // z13 -> max clamp 12px.
+  assert.equal(pane.style.filter, 'blur(4px)');
+  env.map._zoom = 10;
+  env.map.fireMap('zoomend');
+  assert.match(pane.style.filter, /^blur\(10\.9/);
+  env.map._zoom = 13;                            // clamp at max 12px
+  env.map.fireMap('zoomend');
+  assert.equal(pane.style.filter, 'blur(12px)');
   settleAll(); await flush();
 });
 

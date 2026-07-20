@@ -15,12 +15,13 @@
 
 <a class="skip" href="#main">Skip to content</a>
 
-<div class="stage-note"><div class="wrap">Public prototype — one-date satellite-column analysis. No feature currently classifies air-quality episodes.</div></div>
-
+<!-- Information block 1 of 3: the top disclaimer. The other two are
+     "About this layer" (map) and "What this prototype does not yet
+     assess" (near the footer). Caveats are stated once each. -->
 <div class="origin">
   <div class="wrap">
     <span class="flag"></span>
-    <span><b>Not an official air-quality source.</b> An independent analysis project. For advisories, see AirNow, BAAQMD, or EPA.</span>
+    <span><b>Not an official air-quality source.</b> Nothing here is AQI, health advice, or an episode declaration. For advisories, see AirNow, BAAQMD, or EPA.</span>
   </div>
 </div>
 
@@ -57,15 +58,13 @@
       <div class="fld">
         <span class="flabel" id="indicatorLabel">Indicator</span>
         <p class="ctl-static" aria-labelledby="indicatorLabel">Tropospheric NO₂ column</p>
-        <p class="hint">Fixed in this slice. PM2.5 is out of scope; any future PM2.5 work would
-          be an estimate workflow, never a direct satellite observation.</p>
+        <p class="hint">Fixed in this prototype.</p>
       </div>
 
       <div class="fld">
         <label for="analysisDate">Local calendar date</label>
         <input id="analysisDate" class="ctl" type="date" disabled>
-        <p class="hint">One Bay Area local date (America/Los_Angeles) per analysis. Selectable
-          range comes from the backend.</p>
+        <p class="hint">One Bay Area local date (America/Los_Angeles) per analysis.</p>
         <p class="hint" id="freshnessNote"></p>
       </div>
 
@@ -90,7 +89,6 @@
       <section class="block">
         <div class="bhead">
           <h2 class="btitle">Map</h2>
-          <span class="bmeta">Display processing only, never feeds the statistics</span>
         </div>
         <div id="map" role="region" aria-label="Study region map"></div>
         <p class="map-state" id="mapState">Basemap only — boundary and data layers load from the backend.</p>
@@ -102,18 +100,16 @@
         <div class="legend" id="anomalyLegend">
           <span class="bmeta">Anomaly legend renders from backend visualization metadata when the layer loads.</span>
         </div>
-        <!-- The consolidated scientific reading guide for the map: one
-             compact panel instead of repeated caveat boxes. -->
+        <!-- Information block 2 of 3: the single compact map
+             explanation. Every map caveat lives here, once. -->
         <div class="howto">
-          <h3>How to read this map</h3>
-          <p>The layer is the <b>Sentinel-5P tropospheric NO₂ column anomaly</b> — the selected
-            day's column minus the pixelwise historical median for the same calendar month over
-            the previous three years. Sentinel-5P measures a vertical column through the
-            troposphere, not the air at ground level: nothing on this map is an AQI value,
-            health advice, or an episode classification. The 0.01° display grid is oversampled
-            relative to the TROPOMI sensor footprint, so neighbouring display cells are not
-            independent 1&nbsp;km observations. Colours use a per-date display stretch — not a
-            threshold — and colour intensity is not directly comparable across dates.</p>
+          <h3>About this layer</h3>
+          <p><b>Sentinel-5P tropospheric NO₂ column anomaly</b> for the selected date — the
+            day's column minus the pixelwise same-month historical median (previous three
+            years). A display layer for visual interpretation only: it shows a vertical
+            atmospheric column, not ground-level air; colours use a per-date display stretch
+            (not comparable across dates) with display-only smoothing over an oversampled
+            0.01° grid; and nothing shown here feeds the statistics.</p>
         </div>
       </section>
 
@@ -130,7 +126,6 @@
             <p class="rounit" id="ro-mean-unit"></p>
             <div class="prov">
               <span>TROPOMI → L3 grid → daily composite → area-weighted mean</span>
-              <span class="no">not a surface concentration</span>
             </div>
           </div>
           <div class="ro">
@@ -139,7 +134,6 @@
             <p class="rounit" id="ro-anom-unit"></p>
             <div class="prov">
               <span>target mean − same-month median, prior 3 years</span>
-              <span class="no">not an episode declaration</span>
             </div>
           </div>
           <div class="ro">
@@ -148,7 +142,6 @@
             <p class="rounit" id="ro-pct-unit"></p>
             <div class="prov">
               <span>share of historical days at or below target</span>
-              <span class="no">descriptive reference only</span>
             </div>
           </div>
           <div class="ro">
@@ -157,7 +150,6 @@
             <p class="rounit" id="ro-cov-unit"></p>
             <div class="prov">
               <span>valid pixel area ÷ region area, for the date</span>
-              <span class="no">reported always, never used to exclude</span>
             </div>
           </div>
         </div>
@@ -184,69 +176,26 @@
           <div class="drow"><dt>Contributing prior years</dt><dd id="d-contribyears">—</dd></div>
         </dl>
         <p class="hint">Footprint intersection is not contribution: a source asset can intersect
-          the region without supplying any valid pixel. Baseline results are an exploratory
-          rolling comparison against recent same-month history, not a homogeneous long-term
-          trend.</p>
+          the region without supplying any valid pixel. Baseline figures are a rolling
+          comparison against recent same-month history, not a homogeneous long-term trend.</p>
       </section>
 
+      <!-- Information block 3 of 3: the prototype limitation note. -->
       <section class="block notyet">
         <div class="bhead">
           <h2 class="btitle">What this prototype does not yet assess</h2>
         </div>
-        <p>This application does not yet evaluate persistence across days, spatial-extent
-          criteria, ground-monitor corroboration, or meteorological context, and it performs no
-          episode classification. It reports one date's satellite-column evidence — with its
-          coverage and historical context — and stops there.</p>
+        <p>This prototype does not yet classify air-quality episodes or assess persistence
+          across days, spatial extent, ground-monitor corroboration, or meteorology. Daily
+          valid-area coverage varies with clouds and retrieval quality — it is shown with
+          every value — and spatial coincidence with a road or facility is geography, not
+          attribution.</p>
       </section>
 
     </div>
   </div>
 </div>
 </main>
-
-<section class="limits">
-  <div class="wrap">
-    <h2>Known limits of this measurement</h2>
-    <div class="lgrid">
-      <div class="lim">
-        <h3>Column, not ground level</h3>
-        <p>The instrument measures NO₂ through the depth of the troposphere. That is a
-          different physical quantity from what a monitor at street level records.</p>
-      </div>
-      <div class="lim">
-        <h3>Grid is finer than the footprint</h3>
-        <p>The 0.01° product grid is oversampled relative to the native footprint of roughly
-          3.5 × 5.5 km. Neighbouring cells are not independent kilometre-scale measurements.</p>
-      </div>
-      <div class="lim">
-        <h3>Coverage varies by day</h3>
-        <p>Cloud and retrieval quality decide how much of the region is seen. Identical means
-          from 90% and 15% coverage describe very different amounts of evidence, so coverage
-          travels with every number.</p>
-      </div>
-      <div class="lim">
-        <h3>The record is not uniform</h3>
-        <p>Processor and algorithm versions change through the archive. This is a rolling
-          comparison against recent same-month history, not a homogeneous long-term trend.</p>
-      </div>
-      <div class="lim">
-        <h3>Colour intensity is per-date</h3>
-        <p>The anomaly map uses a per-date robust display stretch. It is not a threshold, and
-          colour intensity is not directly comparable between dates.</p>
-      </div>
-      <div class="lim">
-        <h3>Spatial coincidence is not cause</h3>
-        <p>A pattern that lines up with a highway or a facility is geography, not attribution.
-          This product cannot assign column values to a road segment or a site.</p>
-      </div>
-      <div class="lim">
-        <h3>No surface validation yet</h3>
-        <p>Comparison against BAAQMD and EPA surface monitors, overpass timing, and
-          meteorological context remains future work.</p>
-      </div>
-    </div>
-  </div>
-</section>
 
 <footer>
   <div class="wrap">

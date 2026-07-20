@@ -132,10 +132,21 @@ colour is ever hardcoded or invented client-side), the exact backend
 min and max, and a zero marker at the ramp midpoint (the backend
 range is symmetric, so 50% is zero). An uninterpretable backend
 palette produces a truthful legend-unavailable message without
-blocking the tiles. The gradient smooths the **legend only** — the
-map raster keeps its blocky 0.01° display-grid appearance, because
-neighbouring cells are oversampled values, not independent
-fine-resolution observations.
+blocking the tiles. The per-date-stretch and cross-date caveats are
+stated once, in the "About this layer" block, not repeated under the
+legend.
+
+**Display-only raster smoothing (owner-directed 2026-07-20).** The
+anomaly layer rides a dedicated Leaflet pane carrying a CSS
+`blur()` whose radius tracks the on-screen size of one native 0.01°
+cell at the current zoom (factor 1.5, clamped 4–12 px, updated on
+`zoomend`), so cell edges render as a continuous field without
+implying detail finer than the source grid. This is purely a browser
+rendering effect: tiles, backend data values, statistics, and the
+visualization stretch are untouched, and the basemap and boundary
+panes are unaffected. The oversampling disclosure lives in the
+"About this layer" block. Known cosmetic limit: the blur softens the
+clipped edge by a few pixels around the boundary line.
 
 ### Implemented UI states
 
@@ -155,11 +166,13 @@ as 0.
 
 `npm test` runs `ui-harness.test.js` — a Node `node:test` harness
 that drives the real `public/app.js` with stubbed DOM/Leaflet/fetch
-and asserts the map lifecycle: the 0.45 raster opacity, truthful
-tileload/tileerror states, stale-layer and stale-legend removal on
-date changes, removed-layer event isolation, the single-scientific-
-layer rule, boundary-above-raster, the continuous-gradient legend,
-the legend-unavailable state for an uninterpretable palette, and
+and asserts the map lifecycle: the 0.45 raster opacity, the
+dedicated anomaly pane with its zoom-scaled display-only blur (and
+the basemap pane untouched), truthful tileload/tileerror states,
+stale-layer and stale-legend removal on date changes, removed-layer
+event isolation, the single-scientific-layer rule,
+boundary-above-raster, the continuous-gradient legend, the
+legend-unavailable state for an uninterpretable palette, and
 null-never-zero rendering. No browser or network is involved.
 
 ## Environment variables

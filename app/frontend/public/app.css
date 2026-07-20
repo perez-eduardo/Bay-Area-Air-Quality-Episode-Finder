@@ -170,11 +170,10 @@ h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weig
 
 .rounit { font-family: var(--mono); font-size: 11px; color: var(--gray); margin: 6px 0 0; min-height: 1.3em; }
 
-/* The provenance rail: every number states the chain that produced it
-   and the claim it does not support. */
+/* The provenance rail: every number states the chain that produced
+   it. Caveats live in the three information blocks, stated once. */
 .prov { margin-top: 12px; padding-top: 9px; border-top: var(--edge); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--gray); }
 .prov span { display: block; }
-.prov .no { color: var(--secondary-dark); }
 
 /* Scientific warnings (non-NOMINAL contributors, partial baseline
    window, projection incompatibility, map warnings). */
@@ -188,22 +187,11 @@ h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weig
 .drow dt { font-size: 12.5px; color: var(--gray-dark); }
 .drow dd { margin: 0; font-family: var(--mono); font-size: 12.5px; text-align: right; overflow-wrap: anywhere; }
 
-/* ------------------------------------------------------- limitations */
-.limits { background: var(--cool-light); border-top: var(--edge); margin-top: 34px; }
-.limits .wrap { padding-top: 34px; padding-bottom: 38px; }
-.limits h2 { font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase; color: var(--primary-darkest); margin: 0 0 20px; }
-.lgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(252px,1fr)); gap: 22px 32px; }
-.lim h3 { font-family: var(--display); font-size: 14.5px; font-weight: 700; color: var(--primary-darker); margin: 0 0 5px; }
-.lim p { margin: 0; font-size: 14px; color: var(--gray-dark); line-height: 1.5; }
-
 /* ------------------------------------------------------------ footer */
-footer { background: var(--primary-darkest); color: #cddcf0; }
+footer { background: var(--primary-darkest); color: #cddcf0; margin-top: 34px; }
 footer .wrap { padding-top: 24px; padding-bottom: 30px; display: flex; gap: 26px; flex-wrap: wrap; font-size: 13.5px; }
 footer a { color: var(--white); text-decoration: underline; text-underline-offset: 3px; }
 footer a:hover { color: #9fc0e8; }
 footer .attrib { font-family: var(--mono); font-size: 12px; }
-
-.stage-note { background: var(--alt-lightest); border-bottom: var(--edge); font-family: var(--mono); font-size: 11.5px; color: var(--alt-darkest); }
-.stage-note .wrap { padding-top: 6px; padding-bottom: 6px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

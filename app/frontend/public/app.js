@@ -50,6 +50,19 @@
     scientificRasterOpacity: 0.45,
 
     /*
+     * DISPLAY-ONLY smoothing of the anomaly raster (owner-directed
+     * 2026-07-20): a CSS blur on the layer's dedicated map pane. The
+     * radius is tied to the size of one native 0.01° grid cell at the
+     * current zoom (clamped below), so the display smooths cell edges
+     * without inventing detail finer than the source grid. Purely a
+     * browser rendering effect: tiles, backend data values, and every
+     * statistic are untouched, and disabling it costs one CSS filter.
+     */
+    anomalySmoothingCellFactor: 1.5,
+    anomalySmoothingMinPx: 4,
+    anomalySmoothingMaxPx: 12,
+
+    /*
      * Outer browser timeouts. Each is deliberately LONGER than the
      * matching backend bound (app/backend/analysis.js CONSTANTS:
      * context 60 s; boundary 90 s; analysis worst case 540 s = 60 s
@@ -256,6 +269,23 @@
     tileState = {status: 'none', loaded: 0, errored: 0};
   }
 
+  var anomalyPaneReady = false;
+
+  // Sets the display-only blur on the anomaly pane, scaled to the
+  // on-screen size of one native 0.01° cell at the current zoom.
+  function updateAnomalySmoothing() {
+    if (!leafletMap || !anomalyPaneReady || !leafletMap.getPane) return;
+    var pane = leafletMap.getPane('anomaly');
+    if (!pane) return;
+    var zoom = typeof leafletMap.getZoom === 'function' ?
+        leafletMap.getZoom() : CONFIG.mapZoom;
+    var cellPx = 256 * Math.pow(2, zoom) * 0.01 / 360;
+    var blur = Math.min(CONFIG.anomalySmoothingMaxPx,
+        Math.max(CONFIG.anomalySmoothingMinPx,
+            CONFIG.anomalySmoothingCellFactor * cellPx));
+    pane.style.filter = 'blur(' + blur + 'px)';
+  }
+
   function initMap() {
     if (typeof L === 'undefined' || !el('map')) return;
     leafletMap = L.map('map', {
@@ -267,6 +297,19 @@
       maxZoom: 18,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(leafletMap);
+    // Dedicated pane for the scientific raster so the display-only
+    // smoothing filter applies to it alone — never the basemap and
+    // never the vector boundary (overlay pane, z-index 400, above).
+    if (typeof leafletMap.createPane === 'function') {
+      var pane = leafletMap.createPane('anomaly');
+      pane.style.zIndex = 250;
+      pane.style.pointerEvents = 'none';
+      anomalyPaneReady = true;
+      if (typeof leafletMap.on === 'function') {
+        leafletMap.on('zoomend', updateAnomalySmoothing);
+      }
+      updateAnomalySmoothing();
+    }
     // Keyboard users can still zoom; the control is focusable.
     L.control.scale({imperial: true, metric: true}).addTo(leafletMap);
   }
@@ -341,11 +384,14 @@
       };
     }
 
-    satelliteTileLayer = L.tileLayer(mapBlock.tileUrlTemplate, {
+    var layerOptions = {
       opacity: CONFIG.scientificRasterOpacity,
       attribution: mapBlock.attribution ||
           'Contains modified Copernicus Sentinel data'
-    });
+    };
+    if (anomalyPaneReady) layerOptions.pane = 'anomaly';
+    satelliteTileLayer = L.tileLayer(mapBlock.tileUrlTemplate,
+        layerOptions);
     satelliteTileLayer.on('tileload', onTileEvent('load'));
     satelliteTileLayer.on('tileerror', onTileEvent('error'));
     satelliteTileLayer.addTo(leafletMap);
@@ -641,14 +687,8 @@
     high.textContent = '+' + fmtSci(vis.max);
     row.appendChild(high);
     legend.appendChild(row);
-
-    var note = document.createElement('span');
-    note.className = 'bmeta';
-    note.textContent = vis.description ||
-        'Per-date display stretch from backend metadata, not a ' +
-        'threshold; colour intensity is not directly comparable ' +
-        'across dates.';
-    legend.appendChild(note);
+    // The per-date-stretch and cross-date-comparability caveats live
+    // in the single "About this layer" block, not repeated here.
   }
 
   // One-line human state for non-ready analysis statuses.
