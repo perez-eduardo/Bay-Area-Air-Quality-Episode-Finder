@@ -8,14 +8,20 @@ reasoning behind any interpretation of them. **Episode detection** — scanning 
 data for periods that look unusually poor, persistent, and widespread — is one
 planned feature of the dashboard, not the only one.
 
-> **Status: exploratory baseline and anomaly visualization complete;
-> dashboard app not built.**
-> The dashboard app is not built yet. Six Earth Engine exploration
-> scripts exist (see `earthengine/`); the preprocessing investigation is
-> closed with an accepted **working** daily rule (practical, not final),
-> and the approved exploratory historical baseline and
-> **satellite-column anomaly** visualization is implemented and
-> live-tested (script 06) — still not episode classification, with no
+> **Status: Railway backend infrastructure proof live; exploratory
+> baseline and anomaly visualization complete; the public dashboard app
+> is not built.**
+> The Railway backend infrastructure proof is live (2026-07-19/20):
+> Earth Engine service-account authentication and read access to the
+> official BAAQMD boundary asset are verified through the deployed
+> backend. The frontend and the actual scientific public application
+> are **not** built. Earth Engine exploration scripts exist (see
+> `earthengine/`); the preprocessing investigation is closed with an
+> accepted **working** daily rule (practical, not final); the approved
+> exploratory historical baseline and **satellite-column anomaly**
+> visualization is implemented and live-tested (script 06); and the
+> historical-record homogeneity audit is complete with the recorded
+> Outcome B baseline policy — still not episode classification, with no
 > health or AQI interpretation (see
 > [docs/roadmap.md](docs/roadmap.md)). No current feature detects or
 > classifies episodes.
@@ -77,15 +83,15 @@ explicit owner decision. Coverage sensitivity and formal
 surface-monitor validation remain future work. No current feature
 detects or classifies episodes.
 
-## Architecture (decided; not yet implemented)
+## Architecture (decided; backend half live, application not built)
 
-Railway will host the **complete public application** (owner decision,
+Railway hosts the **complete public application** (owner decision,
 2026-07-18):
 
 ```text
 Browser
-  → Railway-hosted frontend
-  → Railway backend/API
+  → Railway-hosted frontend      (future work)
+  → Railway backend/API          (infrastructure proof live)
   → Google Earth Engine
   → statistics, map layers/tiles, and geospatial results
 ```
@@ -97,9 +103,19 @@ public UI, backend/API orchestration, and authentication to Earth
 Engine, so public users will not need their own Earth Engine accounts.
 The previous plan — a Railway landing page linking to a separately
 published Earth Engine App — is no longer the planned final architecture
-(it remains a possible fallback). Migration has not been implemented,
-and stack, authentication, and caching choices are open owner decisions
-(see [docs/architecture.md](docs/architecture.md)).
+(it remains a possible fallback).
+
+**Infrastructure status (2026-07-19/20):** the backend half of the
+chain exists and is running — `api.neuralnetworks.me` reaches the
+Railway backend service, which authenticates to Google Earth Engine
+with a service account and returns JSON. Its endpoints (including
+`/api/ee-check`) are **infrastructure checks only** — they verify that
+the official BAAQMD boundary asset is readable and the Sentinel-5P
+collection is reachable, and return no air-quality results. The
+frontend and the production scientific API remain future work, and the
+frontend/backend frameworks, map library, API design, caching, any
+database, and the frontend hostname are open owner decisions (see
+[docs/architecture.md](docs/architecture.md)).
 
 ## Repository layout
 
@@ -108,12 +124,18 @@ and stack, authentication, and caching choices are open owner decisions
 ├── docs/
 │   ├── methodology.md      # Working definitions, evidence framework, open TODOs
 │   ├── data-sources.md     # Candidate data sources (none final yet)
-│   ├── architecture.md     # Decided architecture (Railway app + Earth Engine)
+│   ├── architecture.md     # Decided architecture + implemented backend infrastructure
 │   └── roadmap.md          # Phased development plan
-├── earthengine/            # Earth Engine scripts (exploration started; app not built)
-├── analysis/               # R analysis / validation notebooks (not started)
-└── landing-page/           # Railway public application (planned; not started)
+├── app/
+│   └── backend/            # Railway backend service (Earth Engine proof of connection; live)
+├── earthengine/            # Earth Engine exploration scripts 01–07 (Code Editor prototypes and audit exports)
+├── analysis/               # R supporting analysis (historical homogeneity audit notebook)
+└── landing-page/           # Superseded landing-page planning notes (application code lives under app/)
 ```
+
+The intended future frontend sibling is `app/frontend/`; it is not yet
+created, and the frontend framework and hostname are open owner
+decisions.
 
 ## Documentation
 
@@ -123,8 +145,9 @@ and stack, authentication, and caching choices are open owner decisions
   "air-quality episode," the evidence framework, and open methodological TODOs
 - [Data sources](docs/data-sources.md) — candidate datasets under consideration
 - [Architecture](docs/architecture.md) — the decided Railway
-  full-application + Earth Engine architecture (implementation not
-  started)
+  full-application + Earth Engine architecture, including the
+  implemented backend infrastructure (frontend and production
+  application not built)
 - [Roadmap](docs/roadmap.md) — development phases
 
 ## Geographic focus

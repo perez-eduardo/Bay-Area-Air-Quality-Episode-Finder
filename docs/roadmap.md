@@ -232,30 +232,73 @@ this fuller phase remains for the reproduction and methodology work below.
 
 ## Phase 5 — Railway public application and publishing
 
-**Architecture decided (2026-07-18), implementation not started.**
-Railway hosts the complete public application: browser → Railway-hosted
-frontend → Railway backend/API → Google Earth Engine → statistics, map
-layers/tiles, and geospatial results. Earth Engine remains the
-geospatial processing engine; the previous plan (a Railway landing page
-linking to a separately published Earth Engine App) is no longer the
-final architecture and remains a possible fallback only (see
-[architecture.md](architecture.md)). None of the items below is
-started, and the stack choices (frontend framework, backend runtime,
-map library, caching design, any database) are open owner decisions.
+**Architecture decided (2026-07-18); backend infrastructure implemented
+and live-tested (2026-07-19/20); the public application itself is NOT
+built.** Railway hosts the complete public application: browser →
+Railway-hosted frontend → Railway backend/API → Google Earth Engine →
+statistics, map layers/tiles, and geospatial results. Earth Engine
+remains the geospatial processing engine; the previous plan (a Railway
+landing page linking to a separately published Earth Engine App) is no
+longer the final architecture and remains a possible fallback only
+(see [architecture.md](architecture.md)). The completed items below
+are **infrastructure only** — the remaining stack choices (frontend
+framework, backend framework, map library, caching design, any
+database, frontend hostname) are open owner decisions, and the broad
+public-application deployment is **not** finished.
 
-- [ ] Frontend/backend application structure (stack choices TODO)
-- [ ] Earth Engine service authentication from the backend (public
-      users must not need their own Earth Engine accounts; design TODO)
-- [ ] Backend API endpoints for statistics, map layers/tiles, and
-      geospatial results
-- [ ] Public map/chart UI (loading/error states, charts, legends,
-      responsive layout, branding)
+Completed backend infrastructure (2026-07-19/20; details in
+[architecture.md](architecture.md)):
+
+- [x] `app/backend/` proof-of-connection service created (deliberately
+      Node's built-in `http` module — an infrastructure proof, not a
+      backend-framework decision; commits `9606a43` and `c896789`)
+- [x] Railway backend service configured (project
+      `bay-area-air-quality-episode`, environment `production`,
+      service `backend`, region US West) with Root Directory
+      `app/backend` — required because `package.json` is not at the
+      repository root
+- [x] Earth Engine service-account authentication working from the
+      backend
+      (`baaqef-backend@thematic-carver-502603-k5.iam.gserviceaccount.com`;
+      key injected via the Railway variable `EE_SERVICE_ACCOUNT_KEY`,
+      kept outside the repository and never committed)
+- [x] Required IAM roles configured: **Earth Engine Resource Viewer**
+      plus **Service Usage Consumer** — the latter demonstrated
+      required in this project (initialization failed with a
+      project-use permission error until it was added)
+- [x] Official BAAQMD boundary asset readability verified through the
+      backend credentials (filtered feature count 1, live check)
+- [x] Sentinel-5P OFFL collection access verified through the backend
+      (latest represented local date 2026-07-10 at verification — a
+      snapshot consistent with OFFL publication latency, not an
+      air-quality result or a valid-regional-data claim)
+- [x] Railway auto-deployment from GitHub `main` configured (a push to
+      `main` redeploys the backend)
+- [x] Custom API domain `api.neuralnetworks.me` working with Railway
+      TLS (Route 53 CNAME plus verification TXT record)
+
+Remaining application work (not started):
+
+- [ ] Frontend service and framework (stack choice TODO); frontend
+      hostname (owner decision)
+- [ ] Deploy the frontend/public application on Railway under the
+      owner-selected frontend hostname (the backend Railway deployment
+      and the `api.neuralnetworks.me` custom domain are complete —
+      checked above)
+- [ ] Production scientific backend API endpoints for statistics, map
+      layers/tiles, and geospatial results (endpoint design TODO — the
+      three proof endpoints are not the application API)
+- [ ] Public map/chart UI (map library TODO; charts, legends,
+      responsive layout, branding; loading/error UX beyond the proof
+      service)
 - [ ] Caching/precomputation evaluation before public exposure —
       strengthened by script 06's slow dynamically stretched layers;
       includes the documented option of precomputing expensive
       daily/baseline products as Earth Engine assets (see
       [architecture.md](architecture.md))
-- [ ] Deployment on Railway with the custom domain (AWS Route 53)
+- [ ] Database decision (whether any database exists at all)
+- [ ] Migration of the exploration scripts' processing logic into
+      backend modules
 - [ ] Public-app testing
 - [ ] Final documentation pass: methodology, limitations, screenshots
 
