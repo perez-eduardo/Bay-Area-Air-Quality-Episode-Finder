@@ -15,7 +15,7 @@
 
 <a class="skip" href="#main">Skip to content</a>
 
-<div class="stage-note"><div class="wrap">Frontend proof of connection — the interface shell is wired to the backend's status endpoint. No analysis runs yet.</div></div>
+<div class="stage-note"><div class="wrap">First vertical slice — one-local-date satellite-column analysis served by the backend API. Implemented, not yet publicly deployed. No feature classifies air-quality episodes.</div></div>
 
 <div class="origin">
   <div class="wrap">
@@ -39,10 +39,10 @@
 <div class="instrument">
   <div class="wrap">
     <div class="icell"><span class="ikey">Instrument</span><span class="ival">Sentinel-5P TROPOMI</span></div>
-    <div class="icell"><span class="ikey">Product</span><span class="ival" id="i-product">pending</span></div>
-    <div class="icell"><span class="ikey">Region</span><span class="ival" id="i-region">pending</span></div>
-    <div class="icell"><span class="ikey">Latest local date</span><span class="ival pending" id="i-latest">pending</span></div>
-    <div class="icell"><span class="ikey">Publication lag</span><span class="ival pending" id="i-lag">pending</span></div>
+    <div class="icell"><span class="ikey">Product</span><span class="ival pending" id="i-product">pending</span></div>
+    <div class="icell"><span class="ikey">Region</span><span class="ival pending" id="i-region">pending</span></div>
+    <div class="icell"><span class="ikey">Latest represented date</span><span class="ival pending" id="i-latest">pending</span></div>
+    <div class="icell"><span class="ikey">Last included date</span><span class="ival pending" id="i-lastinc">pending</span></div>
     <div class="icell"><span class="ikey">Backend</span><span class="ival pending" id="i-backend">checking…</span></div>
   </div>
 </div>
@@ -61,42 +61,34 @@
       <p class="rail-head">Run parameters</p>
 
       <div class="fld">
-        <label for="indicator">Indicator</label>
-        <select id="indicator" class="ctl"><option>NO₂ tropospheric column</option></select>
-        <p class="hint">PM2.5 is out of scope. Any future PM2.5 work would be an estimate
-          workflow, never a direct satellite observation.</p>
+        <span class="flabel" id="indicatorLabel">Indicator</span>
+        <p class="ctl-static" aria-labelledby="indicatorLabel">Tropospheric NO₂ column</p>
+        <p class="hint">Fixed in this slice. PM2.5 is out of scope; any future PM2.5 work would
+          be an estimate workflow, never a direct satellite observation.</p>
       </div>
 
       <div class="fld">
-        <label for="startDate">Target period</label>
-        <div class="pair">
-          <input id="startDate" class="ctl" value="2026-07-03" aria-label="Start date" inputmode="numeric">
-          <input id="endDate" class="ctl" value="2026-07-10" aria-label="End date" inputmode="numeric">
-        </div>
-        <p class="hint">Local dates, America/Los_Angeles. End date is exclusive.</p>
+        <label for="analysisDate">Local calendar date</label>
+        <input id="analysisDate" class="ctl" type="date" disabled>
+        <p class="hint">One Bay Area local date (America/Los_Angeles) per analysis. Selectable
+          range comes from the backend.</p>
+        <p class="hint" id="freshnessNote"></p>
       </div>
 
       <div class="fld">
-        <label for="layer">Map layer</label>
-        <select id="layer" class="ctl">
-          <option>Target-period mean column</option>
-          <option>Historical monthly median</option>
-          <option>Signed anomaly — fixed scale</option>
-          <option>Signed anomaly — detail stretch</option>
-          <option>Historical valid-day count</option>
-        </select>
+        <span class="flabel" id="layerLabel">Map layer</span>
+        <p class="ctl-static" aria-labelledby="layerLabel">Signed column anomaly</p>
       </div>
 
       <div class="fld">
-        <label for="histYears">Historical years</label>
-        <input id="histYears" class="ctl" value="3" aria-label="Historical years" inputmode="numeric">
-        <p class="hint">Same calendar month, prior years only. The target year and future
-          dates are never used.</p>
+        <span class="flabel" id="baselineLabel">Baseline method</span>
+        <p class="ctl-static" aria-labelledby="baselineLabel">Previous three same-calendar years</p>
       </div>
 
-      <button class="go" type="button" id="runButton" disabled>Run comparison</button>
-      <p class="hint" id="runHint">Analysis endpoints are not built yet. This control is
-        inactive until the production API exists.</p>
+      <button class="go" type="button" id="loadButton" disabled>Load date</button>
+
+      <p class="status-live" id="statusLive" role="status" aria-live="polite"></p>
+      <button class="retry" type="button" id="retryContext" hidden>Retry connection</button>
     </aside>
 
     <div class="work">
@@ -107,29 +99,34 @@
           <span class="bmeta">Display processing only, never feeds the statistics</span>
         </div>
         <div id="map" role="region" aria-label="Study region map"></div>
-        <p class="map-state" id="mapState">Basemap only — no data layer is loaded.</p>
-        <div class="legend">
-          <span class="bmeta">Signed anomaly</span>
-          <span class="rlab">below median</span>
-          <div class="ramp" role="img" aria-label="Diverging colour ramp, blue through white to red">
-            <i style="background:var(--a1)"></i><i style="background:var(--a2)"></i>
-            <i style="background:var(--a3)"></i><i style="background:var(--a4)"></i>
-            <i style="background:var(--a5)"></i>
-          </div>
-          <span class="rlab">above median</span>
-          <span class="bmeta">Colour is a display stretch, not a threshold</span>
+        <p class="map-state" id="mapState">Basemap only — boundary and data layers load from the backend.</p>
+        <p class="map-state" id="satLayerState">Anomaly layer: waiting for the first analysis.</p>
+        <button class="retry inblock" type="button" id="retryBoundary" hidden>Retry boundary</button>
+        <!-- The legend renders from backend-supplied visualization
+             metadata only (app.js renderLegend). No fixed palette or
+             numeric limits exist client-side. -->
+        <div class="legend" id="anomalyLegend">
+          <span class="bmeta">Anomaly legend renders from backend visualization metadata when the layer loads.</span>
         </div>
+        <p class="map-state">Layer identification: <b>Sentinel-5P tropospheric NO₂ column anomaly</b>
+          — the signed difference between the selected day's column and the pixelwise historical
+          median for the same calendar month (previous three years). The 0.01° display grid is
+          oversampled relative to the TROPOMI sensor footprint — neighbouring display cells are
+          not independent 1&nbsp;km observations. This layer is not surface concentration, AQI,
+          health advice, or an episode classification.</p>
       </section>
 
       <section class="block">
         <div class="bhead">
           <h2 class="btitle">Readouts</h2>
-          <span class="bmeta" id="readoutState">Awaiting a run</span>
+          <span class="bmeta" id="readoutState">Waiting for the first analysis</span>
+          <button class="retry" type="button" id="retryAnalysis" hidden>Retry analysis</button>
         </div>
         <div class="readouts">
           <div class="ro">
             <p class="rokey">Regional mean column</p>
-            <p class="roval awaiting">—</p>
+            <p class="roval awaiting" id="ro-mean">—</p>
+            <p class="rounit" id="ro-mean-unit"></p>
             <div class="prov">
               <span>TROPOMI → L3 grid → daily composite → area-weighted mean</span>
               <span class="no">not a surface concentration</span>
@@ -137,7 +134,8 @@
           </div>
           <div class="ro">
             <p class="rokey">Signed anomaly</p>
-            <p class="roval awaiting">—</p>
+            <p class="roval awaiting" id="ro-anom">—</p>
+            <p class="rounit" id="ro-anom-unit"></p>
             <div class="prov">
               <span>target mean − same-month median, prior 3 years</span>
               <span class="no">not an episode declaration</span>
@@ -145,7 +143,8 @@
           </div>
           <div class="ro">
             <p class="rokey">Percentile in history</p>
-            <p class="roval awaiting">—</p>
+            <p class="roval awaiting" id="ro-pct">—</p>
+            <p class="rounit" id="ro-pct-unit"></p>
             <div class="prov">
               <span>share of historical days at or below target</span>
               <span class="no">descriptive reference only</span>
@@ -153,23 +152,52 @@
           </div>
           <div class="ro">
             <p class="rokey">Valid-area coverage</p>
-            <p class="roval awaiting">—</p>
+            <p class="roval awaiting" id="ro-cov">—</p>
+            <p class="rounit" id="ro-cov-unit"></p>
             <div class="prov">
-              <span>valid pixel area ÷ region area, per day</span>
+              <span>valid pixel area ÷ region area, for the date</span>
               <span class="no">reported always, never used to exclude</span>
             </div>
           </div>
         </div>
+        <div class="warnbox" id="warnings" hidden></div>
+      </section>
+
+      <section class="block">
+        <div class="bhead">
+          <h2 class="btitle">Observation detail</h2>
+          <span class="bmeta">Provenance travels with every number</span>
+        </div>
+        <dl class="detail">
+          <div class="drow"><dt>Selected local date</dt><dd id="d-date">—</dd></div>
+          <div class="drow"><dt>Observation status</dt><dd id="d-obs">—</dd></div>
+          <div class="drow"><dt>Source assets (footprint)</dt><dd id="d-assets">—</dd></div>
+          <div class="drow"><dt>Distinct products</dt><dd id="d-products">—</dd></div>
+          <div class="drow"><dt>Distinct orbits</dt><dd id="d-orbits">—</dd></div>
+          <div class="drow"><dt>Product quality</dt><dd id="d-quality">—</dd></div>
+          <div class="drow"><dt>Projection compatibility</dt><dd id="d-proj">—</dd></div>
+          <div class="drow"><dt>Baseline status</dt><dd id="d-baseline">—</dd></div>
+          <div class="drow"><dt>Historical median</dt><dd id="d-median">—</dd></div>
+          <div class="drow"><dt>Historical sample count</dt><dd id="d-samples">—</dd></div>
+          <div class="drow"><dt>Requested prior years</dt><dd id="d-reqyears">—</dd></div>
+          <div class="drow"><dt>Contributing prior years</dt><dd id="d-contribyears">—</dd></div>
+        </dl>
+        <p class="hint">Footprint intersection is not contribution: a source asset can intersect
+          the region without supplying any valid pixel. Baseline results are an exploratory
+          rolling comparison against recent same-month history, not a homogeneous long-term
+          trend.</p>
       </section>
 
       <section class="block">
         <div class="bhead">
           <h2 class="btitle">Daily series against baseline</h2>
-          <span class="bmeta">Gaps are missing days, never interpolated</span>
+          <span class="bmeta">Future work — not part of this slice</span>
         </div>
         <div class="empty">
-          <p class="elabel">No series loaded</p>
-          <p class="ehelp">The daily series renders here once the production API exists.</p>
+          <p class="elabel">No series in this slice</p>
+          <p class="ehelp">This slice analyzes one local calendar date at a time. A daily series
+            view is deferred future work; when built, gaps will be missing days, never
+            interpolated.</p>
         </div>
       </section>
 
@@ -215,6 +243,11 @@
         <h3>The record is not uniform</h3>
         <p>Processor and algorithm versions change through the archive. This is a rolling
           comparison against recent same-month history, not a homogeneous long-term trend.</p>
+      </div>
+      <div class="lim">
+        <h3>Colour intensity is per-date</h3>
+        <p>The anomaly map uses a per-date robust display stretch. It is not a threshold, and
+          colour intensity is not directly comparable between dates.</p>
       </div>
       <div class="lim">
         <h3>Spatial coincidence is not cause</h3>

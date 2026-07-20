@@ -1,24 +1,41 @@
-# Railway backend — Earth Engine proof of connection
+# Railway backend — API service (first vertical slice)
 
-**Status: first deployment target (owner-decided 2026-07-19).**
-Infrastructure only: this service verifies that the decided architecture's
-pipe works (Railway backend → service-account authentication → Google
-Earth Engine → JSON out). It performs **no scientific processing** and
-returns **no air-quality results**. The backend *framework* is still an
-open owner decision, so this proof uses only Node's built-in `http`
-module and locks nothing in.
+**Status: first vertical slice implemented in the repository
+(2026-07-20); live verification pending deployment.** This service
+implements the first production API surface — one-local-date
+Sentinel-5P tropospheric NO₂ column observation, the adopted
+three-year baseline, and the signed column-anomaly map metadata — on
+the decided methods in `docs/methodology.md`. The **deployed** Railway
+service still runs the earlier proof-of-connection build until this
+version is pushed and redeployed; do not describe the new routes as
+live until that has been done and verified.
 
-Decisions recorded here (2026-07-19):
+Nothing here classifies air-quality episodes, and nothing in any
+response is an AQI value, a surface concentration, or health advice.
 
-- Backend runtime: **Node.js** (owner decision).
-- Railway layout: **two services** — this backend plus a frontend later
-  (owner decision).
-- Application code location: **`app/backend/`**, with `app/frontend/`
-  to follow (decided by the coding assistant under explicit owner
-  delegation).
-- Service-account Cloud project: **`thematic-carver-502603-k5`** (the
-  boundary asset's project; assistant-advised, owner-accepted default —
-  override with `EE_PROJECT_ID` if this changes).
+Decisions recorded here:
+
+- Backend runtime: **Node.js**, built-in `http` module only (no
+  Express/Fastify/TypeScript, no database) — retained for this slice
+  by owner decision (2026-07-20).
+- Railway layout: **two services** — this backend plus the frontend
+  (`app/frontend/`).
+- Service-account Cloud project: **`thematic-carver-502603-k5`**
+  (override with `EE_PROJECT_ID`).
+
+## Module structure
+
+| File | Responsibility |
+| --- | --- |
+| `server.js` | HTTP startup, routing, CORS allowlist, response helpers, Earth Engine readiness gating, error → status mapping |
+| `earth-engine.js` | Earth Engine authentication state machine plus asynchronous `evaluate`/`getMap` Promise wrappers, each with its own timeout |
+| `analysis.js` | Dataset constants, boundary, date availability, daily canonical-lattice observation, baseline, anomaly image + visualization, bounded in-memory caches |
+| `helpers.test.js` | `node:test` unit tests for the pure helpers (`npm test`) |
+
+No synchronous Earth Engine calls run in request handlers; every
+Earth Engine round trip goes through the async wrappers with an
+independent timeout, and errors are structured (`timeout` → 504,
+`upstream` → 502, unexpected → 500).
 
 ## Endpoints
 
@@ -26,11 +43,210 @@ Decisions recorded here (2026-07-19):
 | --- | --- |
 | `/` | Service description |
 | `/healthz` | Liveness plus the Earth Engine client state (`not_configured` / `authenticating` / `initializing` / `ready` / `error`) |
-| `/api/ee-check` | The proof: (1) the service account can read the official BAAQMD boundary asset (filtered feature count; expected 1), and (2) the Sentinel-5P OFFL collection is reachable (latest represented local date via a `system:time_start` property aggregation). `503` until the client is ready. |
+| `/api/ee-check` | Legacy infrastructure proof of connection (retained unchanged) |
+| `/api/context` | Bootstrap: dataset metadata, authoritative date availability, region, method identifiers |
+| `/api/boundary` | The official BAAQMD boundary as GeoJSON |
+| `/api/analysis?date=YYYY-MM-DD` | One-local-date observation, baseline comparison, and anomaly-map metadata |
 
-A "represented" date is not a statement about valid Bay Area data
-(footprint intersection and representation are never contribution — see
-`docs/data-sources.md`).
+All Earth Engine-backed routes return **503** with a structured
+`ee_not_ready` body until the client is ready. The server always boots
+without credentials and reports `not_configured` from `/healthz`.
+
+### GET /api/context
+
+```jsonc
+{
+  "ok": true,
+  "dataset": {
+    "id": "COPERNICUS/S5P/OFFL/L3_NO2",
+    "band": "tropospheric_NO2_column_number_density",
+    "label": "Sentinel-5P tropospheric NO₂ column",
+    "unit": "mol/m²",
+    "timezone": "America/Los_Angeles",
+    "collectionStartLocalDate": "2018-06-28"
+  },
+  "availability": {
+    "latestRepresentedLocalDate": "YYYY-MM-DD", // newest represented local date over BAAQMD
+    "lastIncludedLocalDate": "YYYY-MM-DD",      // the day before it (conservative exclusion)
+    "defaultLocalDate": "YYYY-MM-DD",           // equals lastIncludedLocalDate
+    "freshnessNote": "…"
+  },
+  "region": { "id": "baaqmd", "label": "Bay Area Air Quality Management District", "boundaryAvailable": true },
+  "methods": {
+    "regionalStatistic": "canonical_native_lattice",
+    "baseline": "previous_three_same_calendar_years_pooled_monthly_median",
+    "mapLayer": "signed_column_anomaly"
+  },
+  "disclaimer": "…"
+}
+```
+
+The newest represented date is **conservatively excluded** because its
+ingestion may still be partial; the frontend must never assume "today"
+is available. Cached ~5 minutes.
+
+### GET /api/boundary
+
+```jsonc
+{
+  "ok": true,
+  "region": { "id": "baaqmd", "label": "…", "sourceAsset": "…", "filter": "Air_Distri == \"BAY AREA AQMD\"" },
+  "geojson": { "type": "FeatureCollection", "features": [ … ] },
+  "disclaimer": "…"
+}
+```
+
+Only the official filtered asset is served (dissolved/unioned to a
+stable outline; no county fallback exists in this API — a
+boundary-read failure is a 502). Cached for the process lifetime.
+
+### GET /api/analysis?date=YYYY-MM-DD
+
+Validation: **400** malformed date; **422** well-formed but outside
+the supported range (`collectionStartLocalDate` …
+`lastIncludedLocalDate`); **503/502/504/500** for
+readiness/upstream/timeout/unexpected failures. A **scientifically
+unavailable date is HTTP 200** with explicit status fields — never an
+HTTP error.
+
+```jsonc
+{
+  "ok": true,
+  "localDate": "YYYY-MM-DD",
+  "dataset": { "id": "…", "band": "…", "label": "…", "unit": "mol/m²", "timezone": "America/Los_Angeles" },
+  "observation": {
+    "status": "available | no_products | no_valid_retrieval | projection_incompatible",
+    "hasValidValue": true,
+    "regionalMeanNo2": 0.000063,        // null when unavailable — never 0
+    "validAreaFraction": 0.8321,        // 0 for no_products / no_valid_retrieval; null when incompatible
+    "sourceAssetCount": 14,             // footprint intersection is NOT contribution
+    "distinctProductCount": 2,
+    "distinctOrbitCount": 2,
+    "hasNonNominalContributors": false,      // true only for explicit non-NOMINAL values
+    "nonNominalProductCount": 0,             // explicit, present values other than "NOMINAL" only
+    "unknownProductQualityCount": 0,         // contributing products with absent/null PRODUCT_QUALITY
+    "productQualityStatus": "nominal | non_nominal | unknown",
+    "projectionCompatibilityStatus": "compatible | incompatible | unknown",
+    "projectionCompatibilityDetail": null
+  },
+  "baseline": {
+    "status": "available | partial_window | target_unavailable | upstream_error",
+    "requestedPriorYears": [2025, 2024, 2023],
+    "contributingPriorYears": [2025, 2024, 2023],
+    "historicalSampleCount": 93,
+    "historicalMedianNo2": 0.000059,    // null on partial_window
+    "signedAnomalyNo2": 0.0000047,      // null unless observation and window complete
+    "percentile": 62.4,                 // ≤ convention; null unless complete
+    "method": "…"
+  },
+  "map": {
+    "status": "available | baseline_unavailable | no_products | no_valid_retrieval | projection_incompatible | visualization_unavailable | upstream_error",
+    "layerType": "signed_column_anomaly",
+    "tileUrlTemplate": "https://…/{z}/{x}/{y}", // null unless status is available
+    "localDate": "YYYY-MM-DD",
+    "unit": "mol/m²",
+    "baselineStatus": "…",
+    "requestedPriorYears": [ … ],
+    "contributingPriorYears": [ … ],
+    "historicalDailyImageCount": 93,
+    "visualization": {
+      "min": -0.000031, "max": 0.000031,        // symmetric: max(|p2|, |p98|) within BAAQMD
+      "paletteStops": ["2166ac", "67a9cf", "f7f7f7", "ef8a62", "b2182b"],
+      "description": "Per-date symmetric robust display stretch; not a threshold …"
+    },
+    "attribution": "Contains modified Copernicus Sentinel data",
+    "hasNonNominalContributors": false,
+    "warning": null,
+    "disclaimer": "…"
+  },
+  "disclaimer": "…"
+}
+```
+
+Hard rules implemented: numeric nulls stay JSON `null`, never 0; no
+coverage threshold; valid negative retrievals preserved; non-NOMINAL
+contributors retained and flagged. `PRODUCT_QUALITY` keeps three
+distinct concepts for contributing products: an explicit `"NOMINAL"`
+value is known nominal; an explicit, present value other than
+`"NOMINAL"` is non-NOMINAL (`nonNominalProductCount` counts only
+these, and `hasNonNominalContributors` is true only when that count is
+positive); an absent or null property is **unknown**
+(`unknownProductQualityCount`) — reported as `unknown`, never counted
+as nominal *or* as non-NOMINAL. `productQualityStatus` is
+`non_nominal` when at least one explicit non-NOMINAL contributor
+exists; `unknown` when none exists but at least one contributor has
+missing/null quality metadata (or there are no products); `nominal`
+only when every contributor is explicitly NOMINAL. No exclusion rule
+exists: unknown and non-NOMINAL products are always retained. An
+incompatible source grid **refuses** rather than silently continuing;
+the anomaly map exists only when all three prior years contribute
+valid same-month data (no silent raw daily-column fallback); the
+visualization stretch is per-date display only.
+
+## Scientific processing (decided methods)
+
+- **Canonical native lattice**: `EPSG:4326` with exact `crsTransform`
+  `[0.01, 0, -180, 0, 0.01, -90]`, no `scale` argument, no
+  `reproject()`, no `bestEffort`, no interpolation.
+- **Defensive PRODUCT_ID reconstruction** (scripts 04–06): only
+  same-`PRODUCT_ID` assets are mosaicked; the **earliest member
+  timestamp determines the product's local date** (the raw window is
+  read one day wider on each side so midnight-straddling members are
+  never split across dates); same-local-date products combined by
+  arithmetic mean.
+- **Regional statistic**: area-weighted mean = Σ(NO₂ × valid pixel
+  area) ÷ Σ(valid pixel area); valid-area fraction against total
+  BAAQMD area on the same grid; reported with every value.
+- **Projection compatibility rule** (accepted 08a v2): same CRS; x/y
+  scale and shear within 1e-9 of canonical; origin offsets integer
+  pixel multiples within 1e-6.
+- **Baseline** (adopted policy, 2026-07-19): previous three
+  same-calendar years, same calendar month, pooled valid daily
+  regional means, median, signed anomaly, ≤-percentile; every
+  requested year must contribute or the window is `partial_window`.
+- **Anomaly image**: target daily canonical-lattice composite minus
+  the pixelwise median of the valid historical daily composites; tile
+  URL obtained via the async `getMapId`/`getMap` path; credentials are
+  never exposed.
+
+## Caching (in-memory only; no database)
+
+| What | Bound | Lifetime |
+| --- | --- | --- |
+| `/api/context` | 1 entry | ~5 minutes |
+| `/api/analysis` (successful responses) | 20 dates, insertion-order eviction | ~1 hour per entry |
+| Boundary GeoJSON, total region area | 1 each | process lifetime |
+| Projection-signature verdicts | per distinct exact signature | process lifetime |
+
+Responses whose visualization-percentile or tile stage failed are not
+cached (the observation and baseline still return, with
+`map.status: "upstream_error"` and a warning, so a retry recomputes
+the map). The boundary and total-area caches store only resolved
+values, never promises, so a transient upstream failure is never
+retained. Nothing persists across restarts. Precomputation (batch
+exports to Earth Engine assets) remains the documented future option
+for scaling (`docs/architecture.md`).
+
+## Timeout budget
+
+One coherent budget, documented here and in the code
+(`analysis.js` `CONSTANTS`, `app/frontend/public/app.js` `CONFIG`):
+
+| Request | Backend bound | Frontend outer timeout |
+| --- | --- | --- |
+| `/api/context` | 60 s | 70 s |
+| `/api/boundary` | 90 s | 100 s |
+| `/api/analysis` | 60 s cold-context lookup + **480 s overall analysis deadline** = 540 s worst case | 600 s |
+
+The 480 s deadline caps the **whole** analysis pipeline: each
+sub-operation (projection signatures 60 s, main statistics 240 s,
+total area 60 s, visualization percentiles 120 s, tile URL 60 s)
+keeps its own smaller cap but is clamped to the time remaining under
+the deadline, so independent sequential sub-timeouts can never total
+more than the deadline. The frontend timeout is always longer than
+the matching backend bound, so the browser never gives up while the
+backend is still within budget. Cold-cache analyses may legitimately
+take **minutes**; only repeat requests are fast.
 
 ## One-time Google Cloud setup
 
@@ -38,47 +254,41 @@ Per the official Earth Engine service-account guide
 (<https://developers.google.com/earth-engine/guides/service_account>):
 
 1. In the Cloud Console, select project **`thematic-carver-502603-k5`**
-   (already registered for Earth Engine — the project's assets prove it).
-   Under *APIs & Services*, confirm the **Earth Engine API** is enabled.
+   and confirm the **Earth Engine API** is enabled.
 2. *IAM & Admin → Service Accounts → Create service account* (e.g.
-   `baaqef-backend`). Grant it the **Earth Engine Resource Viewer** role
-   on the project (add **Service Usage Consumer** only if initialization
-   later complains about quota-project permissions — the official access
-   guide lists it as sometimes required).
-3. Open the account → *Keys → Add key → Create new key → JSON*. Download
-   the key. **Keep it outside the repository directory entirely.** The
-   repo `.gitignore` blocks `*credentials*.json` and `.env*` as a second
-   line of defense, but the key never needs to be near the repo.
+   `baaqef-backend`). Grant **both** roles — both are required in this
+   project:
+   - **Earth Engine Resource Viewer**;
+   - **Service Usage Consumer** — demonstrated required here: Earth
+     Engine initialization failed with a project-use permission error
+     until this role was added (see `docs/architecture.md`).
+3. Open the account → *Keys → Add key → Create new key → JSON*.
+   **Keep the key outside the repository directory entirely.** The
+   repo `.gitignore` blocks `*credentials*.json` and `.env*` as a
+   second line of defense.
 
 ## Run locally (Windows 11, PowerShell)
 
 ```powershell
 cd E:\Personal_projects\Bay-Area-Air-Quality-Episode-Finder\app\backend
 npm install
+npm test                                  # pure-helper unit tests (no credentials needed)
 $env:EE_SERVICE_ACCOUNT_KEY_FILE = "C:\path\outside\repo\baaqef-key.json"
 npm start
 ```
 
-Then open <http://localhost:8080/healthz> (watch the state reach
-`ready`) and <http://localhost:8080/api/ee-check>.
+Without a key the server still boots: `/healthz` reports
+`not_configured` and the API routes return the structured 503.
 
 ## Deploy on Railway
 
-1. Create the Railway project → *Deploy from GitHub repo* → select this
-   repository.
-2. In the service settings, set **Root Directory** to `app/backend`.
-   Railway detects Node from `package.json`; the start command is
-   `npm start`.
-3. Under *Variables*, add:
-   - `EE_SERVICE_ACCOUNT_KEY` — paste the **entire JSON key file
-     contents** (Railway variables accept multi-line values).
-   - `EE_PROJECT_ID` — optional; defaults to
-     `thematic-carver-502603-k5`.
-4. Deploy, then *Settings → Networking → Generate Domain* for a
-   `*.up.railway.app` URL. Hit `/healthz` and `/api/ee-check`.
-
-No custom domain yet: Route 53 stays untouched until there is a public
-frontend worth naming (domain/subdomain remains an open owner decision).
+The Railway service already exists (project
+`bay-area-air-quality-episode`, service `backend`, Root Directory
+`app/backend`, auto-deploy from GitHub `main`). The custom API domain
+**`api.neuralnetworks.me`** is connected with Railway TLS via
+Route 53 (see `docs/architecture.md`). Pushing to `main` redeploys the
+backend; after deploying this version, verify `/healthz`,
+`/api/ee-check`, and the three new routes live.
 
 ## Environment variables
 
@@ -88,15 +298,22 @@ frontend worth naming (domain/subdomain remains an open owner decision).
 | `EE_SERVICE_ACCOUNT_KEY` | Service-account JSON key contents (preferred on Railway) |
 | `EE_SERVICE_ACCOUNT_KEY_FILE` | Path to the JSON key file (convenient locally) |
 | `EE_PROJECT_ID` | Earth Engine Cloud project ID (default `thematic-carver-502603-k5`) |
+| `ALLOWED_ORIGINS` | Comma-separated browser origins granted CORS read access. **When set, it replaces the code defaults** (the Railway value currently does exactly that). `http://localhost:8081` and `http://127.0.0.1:8081` are always appended for local development. **TODO:** once the frontend hostname is chosen, its exact origin must be added to this Railway variable or the browser will show the backend as unreachable. |
 
-If both key variables are set, `EE_SERVICE_ACCOUNT_KEY` wins. With
-neither set, the server boots and reports `not_configured` so a
-misconfigured deploy is diagnosable from `/healthz`.
+If both key variables are set, `EE_SERVICE_ACCOUNT_KEY` wins.
 
-## What comes after the proof
+## Known limitations
 
-All open owner decisions stay open (`docs/architecture.md`): backend
-framework, API endpoint design, caching/precomputation, any database,
-map library and frontend framework, domain/subdomain, and how the
-exploration scripts' processing logic is reorganized into backend
-modules. Nothing in this directory presupposes any of them.
+- A cold-cache `/api/analysis` request evaluates roughly three months
+  of historical daily reductions plus visualization percentiles and a
+  tile lookup in a few large Earth Engine round trips; the first
+  request for a date can take minutes. The bounded caches make repeat
+  requests fast; precomputation is the documented future mitigation
+  and has not been designed.
+- The Earth Engine-backed behavior of the new routes (real
+  observation/baseline values, live tile URLs) can only be verified
+  through credentials — locally with a key file, or on the Railway
+  deployment. The credential-free paths (boot, 503 schemas,
+  validation, caching, pure helpers) are covered by local tests.
+- No rate limiting or per-client quotas exist yet; the API is public
+  and unauthenticated.

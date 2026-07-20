@@ -97,8 +97,10 @@ Still open:
 - [ ] Record the boundary layer's original download source (publisher, URL,
       version, retrieval date) in [data-sources.md](data-sources.md)
 - [ ] Remaining gate work (future, non-blocking for the next exploratory
-      feature): the public map/tile grid and any episode-spatial-analysis
-      grid decision, and the R surface-monitor validation workflow.
+      feature): the episode-spatial-analysis grid and spatial-extent
+      methodology decision, and the R surface-monitor validation
+      workflow (the public map DISPLAY method was decided 2026-07-20 —
+      see [methodology.md](methodology.md)).
       The historical-homogeneity decision and baseline policy were
       recorded 2026-07-19 (Outcome B), and the production
       regional-statistics method was selected 2026-07-20 after the
@@ -181,17 +183,20 @@ decided policy in a user-facing feature is follow-up work.
 - [x] Exploration 08b — full-history DAILY regional-method comparison
       export: all nine yearly daily CSVs (2018–2026) and the manifest
       are complete (2,934 requested local dates, none missing or
-      duplicated). The optional projection-summary batch export is
-      still running — non-blocking archival metadata, not required for
-      the method decision or the UI data contract
+      duplicated). **All 08b exports are complete (2026-07-20)**: the
+      optional projection-summary batch export finished after roughly
+      12 hours and independently confirms 44 exact projection
+      signatures, all EPSG:4326, all compatible, in one lattice group
+      (archival audit evidence only — not read by the application;
+      details in [methodology.md](methodology.md))
 - [x] Production regional-statistics method selected (2026-07-20): the
       canonical native-lattice regional calculation; the legacy
       EPSG:3310 / 7000 m reduction is reclassified as an
       exploration/reference method (verified audit results, decision
       details, and scope limits in [methodology.md](methodology.md)).
-      This does NOT decide the public map/tile grid, any
-      episode-spatial-analysis grid, or any episode threshold,
-      persistence, or spatial-extent rule
+      This does NOT decide any episode-spatial-analysis grid or any
+      episode threshold, persistence, or spatial-extent rule (the
+      public map DISPLAY method was decided separately on 2026-07-20)
 
 ### Exploratory baseline and anomaly visualization (completed)
 
@@ -256,8 +261,9 @@ this fuller phase remains for the reproduction and methodology work below.
 ## Phase 5 — Railway public application and publishing
 
 **Architecture decided (2026-07-18); backend infrastructure implemented
-and live-tested (2026-07-19/20); frontend/UI implementation in progress
-(2026-07-20); production integration and public deployment are NOT
+and live-tested (2026-07-19/20); first vertical slice — production API
+routes plus the one-date frontend — implemented in the repository
+(2026-07-20); deployment of the slice and public exposure are NOT
 done.** Railway hosts the complete public application: browser →
 Railway-hosted frontend → Railway backend/API → Google Earth Engine →
 statistics, map layers/tiles, and geospatial results. Earth Engine
@@ -303,50 +309,87 @@ Completed backend infrastructure (2026-07-19/20; details in
 
 Remaining application work:
 
-- [ ] Frontend service — **in progress** (2026-07-20): an initial UI
-      shell exists at `app/frontend/` — a no-build static service
-      wired to the backend's infrastructure status endpoint, with a
-      vendored-Leaflet basemap and no data layer; **not** integrated
-      with production endpoints, deployed, or public. The final
-      frontend framework (TODO; the shell's no-framework approach is a
-      current implementation, not a decision) and the frontend
-      hostname (owner decision) remain open
-- [ ] Deploy the frontend/public application on Railway under the
-      owner-selected frontend hostname (the backend Railway deployment
-      and the `api.neuralnetworks.me` custom domain are complete —
-      checked above)
-- [ ] Production scientific backend API endpoints for statistics, map
-      layers/tiles, and geospatial results (endpoint design TODO — the
-      three proof endpoints are not the application API; endpoints
-      must implement the semantics in
-      [ui-data-contract.md](ui-data-contract.md))
-- [ ] Implement the UI data contract
-      ([ui-data-contract.md](ui-data-contract.md)) end to end:
-      semantic response concepts, null/status semantics (a null
+- [x] First vertical slice implemented in the repository (2026-07-20;
+      **not deployed — live verification pending**): the backend API
+      (`/api/context`, `/api/boundary`, `/api/analysis?date=`)
+      implements the decided canonical native-lattice observation,
+      the adopted three-year baseline, and the signed column-anomaly
+      map with a per-date robust display stretch; the frontend
+      analyzes one local calendar date at a time with the official
+      boundary, backend-driven date bounds, a
+      backend-metadata-only legend, and the documented null/status
+      states. Node built-in `http` for both services, no-build
+      frontend, vendored Leaflet 1.9.4, OpenStreetMap basemap, no
+      database, bounded in-memory caches only — all retained by owner
+      decision for this slice
+- [ ] Frontend hostname (owner decision) and the final frontend
+      framework decision remain open (the slice's no-framework
+      approach is a current implementation, not a decision)
+- [ ] Deploy the updated backend and the frontend on Railway under
+      the owner-selected frontend hostname, add the frontend origin
+      to the backend's `ALLOWED_ORIGINS` variable (it overrides the
+      code defaults), and verify the new routes and UI live (the
+      backend Railway deployment and the `api.neuralnetworks.me`
+      custom domain are complete — checked above)
+- [x] Production scientific backend API endpoints for statistics and
+      map tiles — first slice implemented in the repo (2026-07-20),
+      following the semantics in
+      [ui-data-contract.md](ui-data-contract.md); not yet deployed or
+      live-verified
+- [x] Implement the UI data contract
+      ([ui-data-contract.md](ui-data-contract.md)) end to end in the
+      slice: semantic response concepts, null/status semantics (a null
       scientific value is never converted to numeric zero),
       backend-supplied date availability (the date picker never
       assumes "today" is available), and the labeling rules
-- [ ] Implement and test the documented UI states: loading; value with
+      (implemented and locally tested 2026-07-20; live verification
+      pending deployment)
+- [x] Implement and test the documented UI states: loading; value with
       complete baseline; value with structurally partial baseline; low
       valid-area fraction (shown, never hidden); no products; products
       but no valid retrieval; non-NOMINAL contributors present;
-      backend unavailable; Earth Engine unavailable; date newer than
-      the last included date
-- [ ] Public map/chart UI (map library TODO — the shell's vendored
-      Leaflet is a current implementation, not a decision; charts,
-      legends, responsive layout, branding; loading/error UX beyond
-      the proof service)
-- [ ] Public map rendering/tile grid and any episode-spatial-analysis
-      grid decision (NOT decided by the regional-statistics selection)
-- [ ] Caching/precomputation evaluation before public exposure —
-      strengthened by script 06's slow dynamically stretched layers;
-      includes the documented option of precomputing expensive
-      daily/baseline products as Earth Engine assets (see
-      [architecture.md](architecture.md))
-- [ ] Database decision (whether any database exists at all)
-- [ ] Migration of the exploration scripts' processing logic into
-      backend modules
-- [ ] Public-app testing
+      backend unavailable; Earth Engine unavailable; date outside the
+      supported range; projection incompatible; visualization
+      unavailable; timeout (implemented and locally exercised
+      2026-07-20; Earth Engine-backed states still need live
+      verification after deployment)
+- [ ] Public chart UI (charting approach TODO; the daily-series view
+      is deferred — this slice analyzes one date at a time; the map
+      UI, legend, responsive layout, and loading/error UX exist in
+      the slice)
+- [x] Public map DISPLAY method decided (2026-07-20): the primary
+      layer is the signed "Sentinel-5P tropospheric NO₂ column
+      anomaly" (target canonical-lattice composite minus pixelwise
+      same-calendar-month historical median under the adopted baseline
+      policy; complete prior-three-year window required — no silent
+      raw-column fallback), served through normal Earth Engine map
+      tiles (Web-Mercator display reprojection by tile rendering; no
+      separate display aggregation; legend from backend visualization
+      metadata with required identification and oversampling text —
+      see [methodology.md](methodology.md)). The backend tile endpoint
+      that will serve it is part of the production-API work above
+- [ ] Episode spatial-extent analysis grid and spatial-extent
+      methodology decision (still open; not settled by the display or
+      regional-statistics decisions)
+- [ ] Caching/precomputation evaluation before public exposure — the
+      slice implements bounded in-memory caches (context ~5 min;
+      successful analyses per date, max 20 entries, ~1 h TTL;
+      boundary/area for the process lifetime), which do not survive
+      restarts and do not remove the multi-minute cold-cache cost of
+      a first analysis; the documented option of precomputing
+      expensive daily/baseline products as Earth Engine assets
+      remains open (see [architecture.md](architecture.md))
+- [x] Database decision for the first slice (owner, 2026-07-20): **no
+      database** — bounded in-memory caches only. Whether any later
+      phase needs persistent storage remains open
+- [x] Migration of the decided processing into backend modules —
+      first slice (2026-07-20): `app/backend/analysis.js` implements
+      the decided daily observation, baseline, and anomaly-map
+      processing; exploration scripts 01–07 remain unchanged
+      scientific references
+- [ ] Public-app testing (local credential-free testing done for the
+      slice; Earth Engine-backed behavior needs the Railway
+      deployment)
 - [ ] Final documentation pass: methodology, limitations, screenshots
 
 ## Later / optional (not commitments)

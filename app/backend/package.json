@@ -1,15 +1,16 @@
 {
   "name": "baaqef-backend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Bay Area Air Quality Episode Finder - Railway backend (Earth Engine proof of connection). Infrastructure only: no scientific processing, no analysis results.",
+  "description": "Bay Area Air Quality Episode Finder - Railway backend API. First vertical slice: one-local-date Sentinel-5P NO2 column observation, three-year baseline, and signed column-anomaly map metadata. Not an official air-quality source.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18"
   },
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@google/earthengine": "^1.7.35"

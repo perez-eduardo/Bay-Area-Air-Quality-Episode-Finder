@@ -262,13 +262,19 @@ production method. The previously planned 5.5/7/10 km equal-area
 sensitivity study was **not** performed and is no longer required for
 the regional statistic.
 
-Still **Open** (owner decisions, NOT settled by the regional-statistics
-selection): the public map rendering grid, map tile resolution, and
-visualization zoom behavior; and the grid for any eventual
-spatial-extent (episode) analysis. The fine 0.01° grid remains
-oversampled relative to the native TROPOMI footprint — neighboring
-cells are not independent one-kilometre observations, and the
-canonical reduction grid is not automatically the public map or
+The public map DISPLAY method is also decided (2026-07-20; see the
+public map display section above): the primary layer is the signed
+**Sentinel-5P tropospheric NO₂ column anomaly**, built from canonical
+native-lattice composites (target minus pixelwise same-calendar-month
+historical median) and served through normal Earth Engine map tiles,
+with no separate display aggregation.
+
+Still **Open** (owner decisions): the grid for any eventual
+spatial-extent (episode) analysis, and the spatial-extent methodology
+itself. The fine 0.01° grid remains oversampled relative to the native
+TROPOMI footprint — neighboring cells are not independent
+one-kilometre observations, and neither the regional-statistics nor
+the display decision makes the canonical grid the
 episode-spatial-analysis grid.
 
 ### Calendar-day rule
@@ -398,9 +404,24 @@ rule (equal CRS; x/y scale and shear within 1e-9; translation
 differences within 1e-6 of an integer pixel offset). Exploration 08b
 then exported the **full-history DAILY regional-method comparison**:
 all nine yearly daily CSVs (2018–2026) and the manifest are complete.
-The optional projection-summary batch export remains in progress and
-is **not required** for the regional-method decision or the frontend
-data contract — nothing below depends on it.
+**All Exploration 08b exports are now complete (2026-07-20)**,
+including the optional projection-summary batch export (roughly a
+12-hour run). The projection summary was archival confirmation only —
+the regional-method decision and the frontend data contract were
+finalized without it, and nothing below depends on it.
+
+**Projection-summary export results (Observed; independently checked
+from the owner-provided CSV, 2026-07-20).** The completed export
+contains 207 calendar-year × exact-projection-signature rows spanning
+2018 through 2026, with 44 distinct exact projection signatures — all
+using EPSG:4326, all compatible with the canonical grid, and all
+belonging to **one compatible lattice group** (nominal scale
+≈ 1113.1949 m). Summed asset count and summed distinct PRODUCT_ID
+count are both 41,192 (2,679 assets/products in the 2026 window).
+This **independently confirms** the startup-catalog conclusion below:
+exact affine origins vary, but every observed projection is an
+integer-pixel shift of one compatible 0.01° lattice. The CSV is audit
+evidence only — it is not read by the application runtime.
 
 **Verified full-history daily results (Observed; independently
 verified from the nine completed daily CSV exports):**
@@ -421,10 +442,12 @@ verified from the nine completed daily CSV exports):**
   ≈ −2.30 percentage points (native lower on 2,068 dates, equal on
   835, higher on 31).
 - Projection setup validation (from the completed year-by-year
-  startup catalog of script 08b — not from the still-running
-  projection-summary export): 44 distinct exact projection signatures
-  observed, all 44 classified as ONE compatible pixel lattice; no
-  genuinely incompatible source projection found.
+  startup catalog of script 08b): 44 distinct exact projection
+  signatures observed, all 44 classified as ONE compatible pixel
+  lattice; no genuinely incompatible source projection found. The
+  since-completed projection-summary batch export independently
+  confirms the same 44 signatures, all compatible, in one lattice
+  group (details above).
 
 **Adopted-baseline robustness (Observed; same source).** Using the
 adopted baseline policy on dates where both methods had a valid target
@@ -457,19 +480,81 @@ path of exploration scripts 04–07 and the audit comparisons, and it is
 **not** the production regional-statistics method.
 
 **Scope limit.** This decision selects the regional-statistics
-reduction only. It does **not** select: the public map rendering grid;
-the map tile resolution; visualization zoom behavior; the eventual
-spatial-extent analysis grid; an episode threshold; a persistence
-rule; a spatial-extent rule; or any AQI or health interpretation. The
-canonical 0.01° reduction grid is not automatically the final public
-map or episode-spatial-analysis grid.
+reduction only. It does **not** select: the eventual spatial-extent
+analysis grid; an episode threshold; a persistence rule; a
+spatial-extent rule; or any AQI or health interpretation. The public
+map DISPLAY method is a **separate** owner decision, recorded in the
+next section (2026-07-20); neither decision makes the canonical 0.01°
+grid the episode-spatial-analysis grid.
 
-**Reproducibility note.** The interactive year-by-year startup catalog
-counted 41,187 assets; the completed manifest sums to 41,192 yearly
-assets because the 2026 batch evaluation observed five additional
-within-window OFFL assets after task creation. This is consistent with
-asynchronous collection ingestion and does not change the date range,
-the compatibility result, or the method decision.
+## Public map display method (decided 2026-07-20)
+
+**Owner decision — applies to PUBLIC MAP VISUALIZATION only.**
+
+**Primary public map product.** The default scientific map layer is
+the **"Sentinel-5P tropospheric NO₂ column anomaly"** — a **signed
+pixelwise anomaly**: the target daily canonical-lattice composite
+minus the pixelwise historical median for the same calendar month. The
+map baseline follows the adopted historical-baseline policy: previous
+three same-calendar years; **all three requested prior years must
+contribute valid same-month observations**; pixelwise median of the
+valid historical daily images; no future or target-date leakage; no
+processor correction factors; no hard valid-area cutoff; valid
+negative retrievals retained; contributing non-NOMINAL products
+retained and flagged. Both the target composite and the historical
+images use the canonical native lattice. (The MAPPED pixelwise median
+and the REGIONAL pooled median of the numeric baseline are related but
+not identical — the established script 06 distinction.) A raw
+daily-column map may be considered later as a **separate selectable
+layer**; it is not selected now, and the anomaly layer never silently
+falls back to it.
+
+**Grid and tile behavior (unchanged from the display decision).**
+
+- Source CRS `EPSG:4326` with affine transform
+  `[0.01, 0, -180, 0, 0.01, -90]`, used as the exact canonical
+  `crs` + `crsTransform` and assigned with `setDefaultProjection()`;
+- **no separate 5.5 km, 7 km, or 10 km aggregation is introduced for
+  display**;
+- Earth Engine serves normal map tiles, and tile rendering performs
+  the display reprojection to Web Mercator;
+- valid negative retrievals are preserved;
+- displayed cells are oversampled and must never be used to infer
+  episode extent or independent 1 km observations.
+
+**Availability behavior (no silent fallback).** If the complete
+prior-three-year baseline is unavailable for a date (structurally
+partial window), **no anomaly tile layer is served or loaded**; the
+basemap and any available official boundary remain, and the UI shows
+"Anomaly map unavailable — complete three-year historical baseline is
+not available for this date." Dates with no products or no valid
+retrieval likewise show their documented states, never an anomaly
+layer. Structurally partial dates may still show the raw regional
+numeric value and its valid-area fraction, but the anomaly map, the
+anomaly number, and the percentile are unavailable.
+
+**Required legend and explanatory text.** The map legend and
+accompanying text must identify the layer as **"Sentinel-5P
+tropospheric NO₂ column anomaly"**; the legend renders from
+backend-supplied visualization metadata (no fixed palette or numeric
+limits are decided here); and the text must explain that the 0.01°
+display grid is oversampled relative to the TROPOMI sensor footprint,
+that neighboring display cells are not independent 1 km observations,
+and that the layer is not surface concentration, AQI, health advice,
+or an episode classification.
+
+**Still open** (owner decisions, NOT settled by this display
+decision): the grid used for future spatial-extent calculations;
+episode thresholds; persistence rules; spatial-extent rules; and any
+final episode-classification method.
+
+**Reproducibility note (ingestion timing).** The interactive
+year-by-year startup catalog counted 41,187 assets; the completed
+batch exports contain 41,192 because five additional within-window
+2026 OFFL assets were observed during the later batch evaluation. This
+is consistent with asynchronous collection ingestion and does not
+change the date range, the compatibility result, or the method
+decision.
 
 ## Exploratory same-calendar-month historical median baseline (script 06)
 
@@ -652,7 +737,9 @@ visible and explainable in the app:
 | Daily contributor definition (valid-pixel products only) and multi-product combination rule | TODO — not decided |
 | Minimum valid daily spatial coverage; daily quality/missingness reporting | **Decided (2026-07-19)** — no hard valid-area-fraction exclusion for the baseline; every valid retrieval retained with the fraction exposed (candidates evaluated retrospectively; they disproportionately removed winter observations); low-coverage display warnings remain an open convention |
 | Area-weighted regional statistics | **Decided (2026-07-20)** — area-weighted regional mean with valid-area fraction, computed on the canonical native lattice (production regional-statistics method; full-history 08b daily audit) |
-| Regional-statistics grid; explicit CRS/transform | **Decided (2026-07-20)** — canonical native lattice, EPSG:4326 with exact `crs` + `crsTransform` `[0.01, 0, -180, 0, 0.01, -90]`, no scale argument. The public map rendering/tile grid and any episode-spatial-analysis grid remain TODO; the 5.5/7/10 km equal-area study was not performed |
+| Regional-statistics grid; explicit CRS/transform | **Decided (2026-07-20)** — canonical native lattice, EPSG:4326 with exact `crs` + `crsTransform` `[0.01, 0, -180, 0, 0.01, -90]`, no scale argument (the 5.5/7/10 km equal-area study was not performed) |
+| Public map display method | **Decided (2026-07-20)** — primary layer: the signed "Sentinel-5P tropospheric NO₂ column anomaly" (target canonical-lattice composite minus pixelwise same-calendar-month historical median, adopted baseline policy; requires the complete prior-three-year window — never a silent raw-column fallback), served through normal Earth Engine map tiles (Web-Mercator display reprojection by tile rendering; no separate display aggregation; legend from backend visualization metadata with required identification and oversampling text). Display only — the episode-spatial-analysis grid remains TODO |
+| Episode spatial-extent analysis grid | TODO — not decided by the regional-statistics or map-display decisions |
 | Regional reducer; pixel weighting, partial/masked pixels, boundary-edge behavior | **Decided for the regional statistic (2026-07-20)** — binary valid-pixel masks, pixelArea weighting, canonical native lattice (legacy EPSG:3310 / 7000 m reclassified as exploration reference). Display/map-grid behavior remains open |
 | Non-nominal product exclusion/flagging rule | **Decided (2026-07-19)** — continue retaining and flagging days with contributing non-NOMINAL products (confirms the practical PRODUCT_QUALITY policy) |
 | Historical homogeneity handling (RPRO/OFFL, processor versions) | **Decided (2026-07-19)** — Outcome B: exploratory historical comparison with explicit restrictions; no exact version matching; no correction factors; changes disclosed (see the decided historical-baseline policy) |

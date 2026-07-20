@@ -1,11 +1,15 @@
 # UI data contract (semantics)
 
-**Status: adopted semantic contract for the public UI (2026-07-20).**
-This document defines the **meaning** of the data the frontend consumes
-and the states it must present. It deliberately does **not** define
-HTTP endpoint paths, transport design, payload encodings, or
-framework-specific interfaces — those remain open owner decisions (see
-[architecture.md](architecture.md)). The backend is the authority for
+**Status: adopted semantic contract for the public UI (2026-07-20);
+implemented by the first vertical slice (2026-07-20).** This document
+defines the **meaning** of the data the frontend consumes and the
+states it must present. The first vertical slice implements it with
+three owner-decided endpoints — `GET /api/context`,
+`GET /api/boundary`, and `GET /api/analysis?date=YYYY-MM-DD` (concrete
+schemas in `app/backend/README.md`; implemented in the repository, not
+yet deployed). This semantic contract remains the authority: if an
+implementation detail and this document disagree, this document and
+[methodology.md](methodology.md) win. The backend is the authority for
 date availability and null/status semantics; the frontend must consume
 these concepts, never reconstruct Earth Engine rules on its own.
 
@@ -49,7 +53,8 @@ One daily regional observation carries:
 | Source asset count | Footprint-intersecting raw assets on the date (footprint intersection is **not** contribution) |
 | Distinct product count | Reconstructed products assigned to the date |
 | Distinct orbit count | Where available |
-| Non-NOMINAL flag/count | Whether contributing products with non-NOMINAL `PRODUCT_QUALITY` exist (retained and flagged, never excluded) |
+| Non-NOMINAL flag/count | Whether contributing products with an **explicit** non-NOMINAL `PRODUCT_QUALITY` value exist (retained and flagged, never excluded) |
+| Unknown-quality count | Contributing products whose `PRODUCT_QUALITY` is absent or null — reported as **unknown**, never counted as nominal or as non-NOMINAL (retained) |
 | Projection-compatibility status | Whether the date's source grids satisfied the accepted compatibility rule (an incompatible date has null native statistics by design) |
 | Quality/status code | Machine-readable status distinguishing the cases in section D |
 
@@ -142,19 +147,54 @@ Hard rules:
   future approved methodology explicitly supports them (none does
   today).
 
-## F. Map separation
+## F. Map separation and the decided display method
 
 - The regional numeric statistic and the map are **separate output
-  products**.
-- The native-lattice decision governs the **regional statistic** only.
-- The final map rendering/analysis grid **remains an open owner
-  decision** — the canonical 0.01° reduction grid is not automatically
-  the public map grid or any future episode-spatial-analysis grid.
+  products**. The native-lattice decision governs the **regional
+  statistic**; the public map DISPLAY method is a separate decided
+  item (2026-07-20; full specification in
+  [methodology.md](methodology.md)).
+- **Primary public map product:** the signed **"Sentinel-5P
+  tropospheric NO₂ column anomaly"** — the target daily
+  canonical-lattice composite minus the pixelwise historical median
+  for the same calendar month (previous three years, all three
+  represented, per the adopted baseline policy; both target and
+  historical images on the canonical native lattice) — served through
+  **normal Earth Engine map tiles**, with Web-Mercator display
+  reprojection handled by tile rendering and no separate display
+  aggregation. A raw daily-column map may later become a separate
+  selectable layer; it is not part of this contract, and the anomaly
+  layer **never silently falls back** to it.
+- **Availability rule:** an anomaly layer exists only for dates with a
+  complete prior-three-year baseline AND a valid target composite.
+  Structurally partial dates show "Anomaly map unavailable — complete
+  three-year historical baseline is not available for this date."
+  (raw regional value and valid-area fraction may still be shown as
+  numbers; the anomaly map, anomaly number, and percentile are
+  unavailable). No-products and no-valid-retrieval dates show their
+  documented states — never an anomaly layer.
+- **Backend map-response concepts** the frontend consumes for the
+  layer: a **tile URL template**; layer type (**signed column
+  anomaly**); the requested local date; unit (mol/m²); baseline
+  status; requested prior years; contributing prior years; historical
+  sample information; visualization minimum and maximum; palette or
+  legend stops; attribution; oversampling and scientific disclaimer
+  text; and the non-NOMINAL-contributor warning/status. The frontend
+  renders its legend **from this metadata** and must never construct
+  Earth Engine tile URLs itself or invent tiles, ranges, colors,
+  thresholds, or values; until the backend tile endpoint exists, the
+  UI shows the pending state (section G) — the layer is pending an
+  endpoint, **not** an undecided map grid.
+- The grid for any future **episode-spatial-extent analysis remains an
+  open owner decision** — neither the regional-statistics nor the
+  display decision settles it.
 - The frontend must **not** infer an episode or a spatial extent
   merely from map colors; map styling is display processing and never
-  feeds statistics.
-- Map legends must identify the layer as **Sentinel-5P tropospheric
-  NO₂ column** data.
+  feeds statistics, and displayed 0.01° cells are oversampled — never
+  independent 1 km observations.
+- Map legends must identify the layer as **"Sentinel-5P tropospheric
+  NO₂ column anomaly"**, with the oversampling explanation and the
+  not-surface/not-AQI/not-health/not-episode disclaimer.
 
 ## G. Suggested UI states (implementation/testing)
 
@@ -172,6 +212,16 @@ Testable states the frontend should implement and exercise:
 8. Backend unavailable.
 9. Earth Engine unavailable (backend up, upstream not ready).
 10. Requested date newer than the last included local date.
+11. Satellite anomaly layer waiting for the first analysis or for the
+    backend connection (basemap shown; no fabricated layer). The
+    historical "pending endpoint" form of this state is obsolete in
+    the first slice — the tile-serving endpoint exists in the
+    repository implementation.
+12. Anomaly map unavailable for the selected date — incomplete
+    prior-three-year baseline, no products, no valid retrieval,
+    projection incompatibility, or visualization bounds unavailable
+    (basemap and any available boundary kept; the documented message
+    shown; never a silent raw daily-column fallback).
 
 Test-fixture note: 2025-11-02 is a known zero-product date in the
 audited record and is a useful fixture for state 5 — but it is a

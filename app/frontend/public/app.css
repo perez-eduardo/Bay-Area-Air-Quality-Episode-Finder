@@ -100,7 +100,10 @@ h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weig
 .rail { border-right: var(--edge); padding: 22px 24px 30px 0; }
 .rail-head { font-family: var(--display); font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gray-dark); margin: 0 0 18px; padding-bottom: 10px; border-bottom: var(--edge); }
 .fld { margin-bottom: 19px; }
-.fld > label { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-dark); margin-bottom: 6px; }
+.fld > label, .fld > .flabel { display: block; font-size: 12.5px; font-weight: 600; color: var(--gray-dark); margin-bottom: 6px; }
+/* Fixed (read-only) parameters of this slice: displayed as values, not
+   as inert form controls that only look interactive. */
+.ctl-static { margin: 0; background: var(--gray-lightest); border: 1px solid var(--gray-lighter); color: var(--gray-dark); font-family: var(--mono); font-size: 13.5px; padding: 9px 10px; }
 .ctl { width: 100%; background: var(--white); border: 1px solid var(--gray-light); border-radius: 0; color: var(--base); font-family: var(--mono); font-size: 13.5px; padding: 9px 10px; }
 .ctl:focus-visible { outline: 3px solid var(--primary); outline-offset: 0; }
 .ctl[disabled] { background: var(--gray-lightest); color: var(--gray); }
@@ -111,6 +114,13 @@ h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weig
 .go:hover:not([disabled]) { background: var(--primary-darker); }
 .go:focus-visible { outline: 3px solid var(--base); outline-offset: 2px; }
 .go[disabled] { background: var(--gray-light); cursor: not-allowed; }
+
+/* Asynchronous status (ARIA live region) and retry buttons. */
+.status-live { font-family: var(--mono); font-size: 12px; color: var(--gray-dark); margin: 12px 0 0; min-height: 1.4em; line-height: 1.5; }
+.retry { margin-top: 10px; background: var(--white); border: 1px solid var(--primary); color: var(--primary-darker); font-family: var(--body); font-size: 13px; font-weight: 600; padding: 8px 14px; cursor: pointer; }
+.retry:hover { background: var(--cool-light); }
+.retry:focus-visible { outline: 3px solid var(--base); outline-offset: 2px; }
+.retry.inblock { margin-top: 8px; }
 
 /* --------------------------------------------------------------- work */
 .work { padding: 22px 0 0 26px; }
@@ -131,9 +141,12 @@ h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weig
 
 /* ------------------------------------------------------------ legend */
 .legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.legend-row { display: flex; align-items: flex-start; gap: 8px; }
+.ramp-wrap { display: flex; flex-direction: column; align-items: center; }
 .ramp { display: flex; height: 13px; width: 200px; border: 1px solid var(--gray-light); }
 .ramp i { flex: 1; }
 .rlab { font-family: var(--mono); font-size: 11px; color: var(--gray); }
+.rzero { margin-top: 2px; }
 
 /* ----------------------------------------------------------- readouts */
 .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px,1fr)); gap: 16px; }
@@ -142,11 +155,25 @@ h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weig
 .roval { font-family: var(--mono); font-size: 26px; font-weight: 500; line-height: 1; margin: 0; }
 .roval.awaiting { color: var(--gray-light); }
 
+.rounit { font-family: var(--mono); font-size: 11px; color: var(--gray); margin: 6px 0 0; min-height: 1.3em; }
+
 /* The provenance rail: every number states the chain that produced it
    and the claim it does not support. */
 .prov { margin-top: 12px; padding-top: 9px; border-top: var(--edge); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--gray); }
 .prov span { display: block; }
 .prov .no { color: var(--secondary-dark); }
+
+/* Scientific warnings (non-NOMINAL contributors, partial baseline
+   window, projection incompatibility, map warnings). */
+.warnbox { margin-top: 16px; border-left: 4px solid var(--alt-darkest); background: var(--alt-lightest); padding: 11px 15px; }
+.warnbox p { margin: 0 0 8px; font-size: 13.5px; color: var(--gray-dark); max-width: 88ch; }
+.warnbox p:last-child { margin-bottom: 0; }
+
+/* ---------------------------------------------------- detail table */
+.detail { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); gap: 0 28px; }
+.drow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px dotted var(--gray-lighter); }
+.drow dt { font-size: 12.5px; color: var(--gray-dark); }
+.drow dd { margin: 0; font-family: var(--mono); font-size: 12.5px; text-align: right; overflow-wrap: anywhere; }
 
 /* -------------------------------------------------------- empty state */
 .empty {

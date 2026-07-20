@@ -1,16 +1,26 @@
 /*
  * Bay Area Air Quality Episode Finder — public UI.
  *
- * STAGE: frontend proof of connection. The shell is wired to the
- * backend's infrastructure status endpoint only. No analysis runs here,
- * no scientific value is computed or displayed, and no map data layer
- * is loaded — the production API does not exist yet.
+ * STAGE: first vertical slice. The UI analyzes ONE Bay Area local
+ * calendar date at a time against the backend API:
+ *   GET /api/context   — dataset, availability, region bootstrap
+ *   GET /api/boundary  — official BAAQMD boundary GeoJSON
+ *   GET /api/analysis  — observation, baseline, anomaly-map metadata
  *
  * Structure deliberately mirrors exploration scripts 02–06: a single
- * `state` cache, a `render()` that redraws purely from that cache, and a
- * request token that makes stale asynchronous results harmless. Keeping
- * the app's control flow identical to the scientific scripts means one
- * reading of the pattern covers both.
+ * `state` cache, a `render()` that redraws purely from that cache, and
+ * request tokens that make stale asynchronous results harmless.
+ *
+ * Scientific presentation rules (docs/ui-data-contract.md):
+ *   - the backend is the authority for date availability and for
+ *     null/status semantics; nothing here reconstructs Earth Engine
+ *     rules or fabricates values;
+ *   - a null scientific value is NEVER rendered as zero;
+ *   - the valid-area fraction is displayed with every value and never
+ *     used as a hidden pass/fail filter;
+ *   - the anomaly legend renders only from backend visualization
+ *     metadata; no palette, range, or threshold is invented here;
+ *   - no AQI, health, surface-concentration, or episode wording.
  *
  * Plain browser JavaScript, no framework and no build step: the file
  * served is the file in the repository.
@@ -27,13 +37,23 @@
     backendOrigin: (window.BACKEND_ORIGIN || '').indexOf('__') === 0 ?
         'https://api.neuralnetworks.me' : window.BACKEND_ORIGIN,
 
-    // Bay Area view for the basemap. A convenient map view only: it is
-    // not the study-region boundary, which is defined by the official
-    // BAAQMD asset and is not drawn until the API can supply it.
+    // Bay Area view for the basemap until the official boundary
+    // arrives; the map is fitted to the boundary exactly once.
     mapCenter: [37.75, -122.15],
     mapZoom: 8,
 
-    statusTimeoutMs: 20000
+    /*
+     * Outer browser timeouts. Each is deliberately LONGER than the
+     * matching backend bound (app/backend/analysis.js CONSTANTS:
+     * context 60 s; boundary 90 s; analysis worst case 540 s = 60 s
+     * cold-context lookup + the 480 s overall analysis deadline), so
+     * the browser never gives up while the backend is still within
+     * its own budget. Cold-cache analyses may legitimately take
+     * minutes.
+     */
+    contextTimeoutMs: 70000,
+    boundaryTimeoutMs: 100000,
+    analysisTimeoutMs: 600000
   };
 
   /* ------------------------------------------------------------- STATE */
@@ -41,18 +61,26 @@
   // Single source of truth for everything rendered. Never read the DOM
   // to discover application state.
   var state = {
-    status: 'checking',   // checking | ok | degraded | unreachable
-    detail: null,
-    product: null,
-    region: null,
-    latestLocalDate: null,
-    publicationLagDays: null,
-    boundaryReadable: null,
-    collectionReachable: null
+    // context: loading | ready | ee_not_ready | timeout | unreachable |
+    //          error
+    context: {status: 'loading', data: null, message: null},
+    // boundary: idle | loading | ready | timeout | unavailable
+    boundary: {status: 'idle', message: null},
+    // analysis: idle | loading | ready | invalid_date | out_of_range |
+    //           ee_not_ready | upstream_error | upstream_timeout |
+    //           timeout | unreachable | error
+    analysis: {status: 'idle', data: null, message: null,
+               requestedDate: null},
+    statusMessage: 'Loading…'
   };
 
-  // Guards against out-of-order responses if a check is ever re-issued.
-  var requestToken = 0;
+  // Monotonic per-phase request tokens: a response is applied only if
+  // its token is still current, so a late response for an older
+  // request can never overwrite the current one.
+  var contextToken = 0;
+  var boundaryToken = 0;
+  var analysisToken = 0;
+  var analysisRequest = null;   // {controller, timedOut} of the active request
 
   /* --------------------------------------------------------- ELEMENTS */
 
@@ -62,29 +90,77 @@
     product: el('i-product'),
     region: el('i-region'),
     latest: el('i-latest'),
-    lag: el('i-lag'),
+    lastinc: el('i-lastinc'),
     backend: el('i-backend'),
-    mapState: el('mapState')
+    freshness: el('freshnessNote'),
+    dateInput: el('analysisDate'),
+    loadButton: el('loadButton'),
+    statusLive: el('statusLive'),
+    retryContext: el('retryContext'),
+    retryBoundary: el('retryBoundary'),
+    retryAnalysis: el('retryAnalysis'),
+    mapState: el('mapState'),
+    satLayer: el('satLayerState'),
+    legend: el('anomalyLegend'),
+    readoutState: el('readoutState'),
+    roMean: el('ro-mean'), roMeanUnit: el('ro-mean-unit'),
+    roAnom: el('ro-anom'), roAnomUnit: el('ro-anom-unit'),
+    roPct: el('ro-pct'), roPctUnit: el('ro-pct-unit'),
+    roCov: el('ro-cov'), roCovUnit: el('ro-cov-unit'),
+    warnings: el('warnings'),
+    dDate: el('d-date'), dObs: el('d-obs'), dAssets: el('d-assets'),
+    dProducts: el('d-products'), dOrbits: el('d-orbits'),
+    dQuality: el('d-quality'), dProj: el('d-proj'),
+    dBaseline: el('d-baseline'), dMedian: el('d-median'),
+    dSamples: el('d-samples'), dReqYears: el('d-reqyears'),
+    dContribYears: el('d-contribyears')
   };
 
   /* --------------------------------------------------------- HELPERS */
 
-  // Whole days between two 'YYYY-MM-DD' local dates. ISO date strings
-  // parse as UTC midnight, so this is calendar-day arithmetic and is
-  // unaffected by the browser's timezone.
-  function dayGap(fromDate, toDate) {
-    var a = Date.parse(fromDate);
-    var b = Date.parse(toDate);
-    if (isNaN(a) || isNaN(b)) return null;
-    return Math.round((b - a) / 86400000);
+  var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  // Scientific notation for column values (mol/m² magnitudes are tiny;
+  // fixed-point would hide them or read as zero). Null stays null.
+  function fmtSci(value) {
+    if (value === null || value === undefined ||
+        typeof value !== 'number' || !isFinite(value)) {
+      return null;
+    }
+    if (value === 0) return '0';
+    return value.toExponential(3);
   }
 
-  function todayUtcDateString() {
-    var now = new Date();
-    var m = now.getUTCMonth() + 1;
-    var d = now.getUTCDate();
-    return now.getUTCFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' +
-        (d < 10 ? '0' + d : d);
+  // Signed variant for anomalies: an explicit '+' keeps the sign of
+  // small positive anomalies visible.
+  function fmtSciSigned(value) {
+    var s = fmtSci(value);
+    if (s === null) return null;
+    return value > 0 ? '+' + s : s;
+  }
+
+  function fmtPercentile(value) {
+    if (value === null || value === undefined ||
+        typeof value !== 'number' || !isFinite(value)) {
+      return null;
+    }
+    return value.toFixed(1);
+  }
+
+  // Valid-area fraction as a percentage. 0 is a real scientific value
+  // here (no valid area), distinct from null (not applicable).
+  function fmtCoverage(fraction) {
+    if (fraction === null || fraction === undefined ||
+        typeof fraction !== 'number' || !isFinite(fraction)) {
+      return null;
+    }
+    var pct = fraction * 100;
+    return (pct !== 0 && pct < 1 ? pct.toFixed(2) : pct.toFixed(1)) + '%';
+  }
+
+  function joinYears(years) {
+    if (!years || !years.length) return null;
+    return years.join(', ');
   }
 
   function setCell(node, text, className) {
@@ -93,129 +169,68 @@
     node.className = 'ival' + (className ? ' ' + className : '');
   }
 
-  /* ---------------------------------------------------------- RENDER */
-
-  // Redraws every status-dependent element from `state`. Safe to call at
-  // any time; calling it twice produces the same result.
-  function render() {
-    setCell(nodes.product, state.product || 'unavailable',
-        state.product ? '' : 'pending');
-    setCell(nodes.region, state.region || 'unavailable',
-        state.region ? '' : 'pending');
-    setCell(nodes.latest, state.latestLocalDate || 'unavailable',
-        state.latestLocalDate ? '' : 'pending');
-
-    if (state.publicationLagDays === null) {
-      setCell(nodes.lag, 'unavailable', 'pending');
-    } else {
-      setCell(nodes.lag, state.publicationLagDays + ' d', 'flagged');
-    }
-
-    if (state.status === 'checking') {
-      setCell(nodes.backend, 'checking…', 'pending');
-    } else if (state.status === 'ok') {
-      setCell(nodes.backend, 'reachable', 'good');
-    } else if (state.status === 'degraded') {
-      setCell(nodes.backend, 'degraded', 'bad');
-    } else {
-      setCell(nodes.backend, 'unreachable', 'bad');
-    }
-
-    if (nodes.mapState) {
-      nodes.mapState.textContent = mapStateText();
-    }
+  function setText(node, text) {
+    if (node) node.textContent = text;
   }
 
-  // Empty and failure states are directions, not apologies: each says
-  // what is true and what would change it.
-  function mapStateText() {
-    if (state.status === 'unreachable') {
-      return 'Basemap only. The backend could not be reached, so no ' +
-          'study-region or data layer can be drawn.';
+  // Readout setter: null values render as an em dash with the reason
+  // on the unit line — never as zero.
+  function setReadout(valueNode, unitNode, formatted, unitText) {
+    if (formatted === null) {
+      valueNode.textContent = '—';
+      valueNode.className = 'roval awaiting';
+    } else {
+      valueNode.textContent = formatted;
+      valueNode.className = 'roval';
     }
-    if (state.status === 'degraded') {
-      return 'Basemap only. The backend responded but its Earth Engine ' +
-          'checks did not pass; no layer is drawn.';
-    }
-    return 'Basemap only — no data layer is loaded. The study-region ' +
-        'boundary and analysis layers appear here once the production ' +
-        'API is built.';
+    unitNode.textContent = unitText || '';
   }
-
-  /* -------------------------------------------------- BACKEND STATUS */
 
   /*
-   * Reads the backend's infrastructure proof endpoint and records what
-   * it reports. This is a connectivity and provenance check only: it
-   * returns no scientific values, and the UI presents none.
-   *
-   * The publication lag is derived here rather than read from the
-   * backend, and it is exactly what it says — the gap in calendar days
-   * between today and the newest local date represented in the
-   * collection. It is not a statement about valid Bay Area data on that
-   * date.
+   * fetch wrapper: JSON body (null if unparsable) plus HTTP status,
+   * with an outer timeout wired through AbortController. The holder's
+   * timedOut flag distinguishes a timeout abort from a supersede
+   * abort.
    */
-  function checkBackend() {
-    var token = ++requestToken;
-    state.status = 'checking';
-    render();
-
-    var controller = typeof AbortController !== 'undefined' ?
-        new AbortController() : null;
+  function fetchJson(url, timeoutMs, holder) {
     var timer = setTimeout(function () {
-      if (controller) controller.abort();
-    }, CONFIG.statusTimeoutMs);
+      holder.timedOut = true;
+      holder.controller.abort();
+    }, timeoutMs);
+    return fetch(url, {signal: holder.controller.signal})
+        .then(function (response) {
+          return response.json().catch(function () {
+            return null;
+          }).then(function (body) {
+            return {httpStatus: response.status, body: body};
+          });
+        })
+        .finally(function () { clearTimeout(timer); });
+  }
 
-    fetch(CONFIG.backendOrigin + '/api/ee-check', {
-      signal: controller ? controller.signal : undefined
-    }).then(function (response) {
-      if (!response.ok) {
-        throw new Error('Backend returned HTTP ' + response.status);
-      }
-      return response.json();
-    }).then(function (body) {
-      if (token !== requestToken) return; // superseded
-      clearTimeout(timer);
+  function isAbortError(error) {
+    return !!error && (error.name === 'AbortError' ||
+        error.code === 20);
+  }
 
-      state.product = body.collection && body.collection.id ?
-          body.collection.id.replace('COPERNICUS/', '') : null;
-      state.region = body.boundary && body.boundary.readable ?
-          'BAAQMD jurisdiction' : null;
-      state.boundaryReadable = body.boundary ? body.boundary.readable : null;
-      state.collectionReachable =
-          body.collection ? body.collection.reachable : null;
-      state.latestLocalDate = body.collection ?
-          body.collection.latestRepresentedLocalDate : null;
-      state.publicationLagDays = state.latestLocalDate ?
-          dayGap(state.latestLocalDate, todayUtcDateString()) : null;
-      state.status = body.ok ? 'ok' : 'degraded';
-      state.detail = null;
-      render();
-    }).catch(function (error) {
-      if (token !== requestToken) return;
-      clearTimeout(timer);
-      state.status = 'unreachable';
-      state.detail = String(error && error.message || error);
-      render();
-      // Surfaced for developers; the interface states the condition
-      // plainly without echoing internals at the reader.
-      console.warn('[status] backend check failed:', state.detail);
-    });
+  function errorMessageFrom(result, fallback) {
+    if (result && result.body && result.body.error &&
+        result.body.error.message) {
+      return String(result.body.error.message);
+    }
+    return fallback;
   }
 
   /* -------------------------------------------------------------- MAP */
 
-  /*
-   * Basemap only. No study-region outline and no analysis layer are
-   * drawn, because both must come from the documented BAAQMD asset
-   * through the backend, and that API does not exist yet. Drawing an
-   * approximate outline here would contradict the project's own rule
-   * that the county approximation is a clearly labelled fallback, never
-   * a silent substitute.
-   */
+  var leafletMap = null;
+  var boundaryLayer = null;        // single reference; never duplicated
+  var boundaryFitted = false;      // fit to the boundary exactly once
+  var satelliteTileLayer = null;   // single reference; never stacked
+
   function initMap() {
     if (typeof L === 'undefined' || !el('map')) return;
-    var map = L.map('map', {
+    leafletMap = L.map('map', {
       center: CONFIG.mapCenter,
       zoom: CONFIG.mapZoom,
       scrollWheelZoom: false   // avoids hijacking page scroll
@@ -223,9 +238,731 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
       attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    }).addTo(leafletMap);
     // Keyboard users can still zoom; the control is focusable.
-    L.control.scale({imperial: true, metric: true}).addTo(map);
+    L.control.scale({imperial: true, metric: true}).addTo(leafletMap);
+  }
+
+  // Draws the official boundary. Removing any previous layer first
+  // means retries never duplicate it; the basemap is never touched.
+  function setBoundaryLayer(geojson) {
+    if (!leafletMap) return;
+    if (boundaryLayer) {
+      leafletMap.removeLayer(boundaryLayer);
+      boundaryLayer = null;
+    }
+    boundaryLayer = L.geoJSON(geojson, {
+      style: {
+        color: '#0b3d91', weight: 2, opacity: 0.9,
+        fillOpacity: 0.02, interactive: false
+      }
+    }).addTo(leafletMap);
+    if (!boundaryFitted) {
+      try {
+        leafletMap.fitBounds(boundaryLayer.getBounds(),
+            {padding: [12, 12]});
+        boundaryFitted = true;
+      } catch (ignored) { /* keep the default view */ }
+    }
+  }
+
+  // Removes the scientific layer. Called before adding a new date's
+  // layer and on EVERY unavailable/error state so stale anomaly tiles
+  // never linger under a message that says otherwise.
+  function removeAnomalyLayer() {
+    if (leafletMap && satelliteTileLayer) {
+      leafletMap.removeLayer(satelliteTileLayer);
+    }
+    satelliteTileLayer = null;
+  }
+
+  // Adds the anomaly tile layer for a successful date. Refuses to run
+  // without a real tile URL template: nothing is ever fabricated.
+  function setAnomalyLayer(mapBlock) {
+    if (!leafletMap || !mapBlock ||
+        typeof mapBlock.tileUrlTemplate !== 'string' ||
+        mapBlock.tileUrlTemplate.length === 0) {
+      return false;
+    }
+    removeAnomalyLayer();
+    satelliteTileLayer = L.tileLayer(mapBlock.tileUrlTemplate, {
+      opacity: 0.75,
+      attribution: mapBlock.attribution ||
+          'Contains modified Copernicus Sentinel data'
+    }).addTo(leafletMap);
+    return true;
+  }
+
+  /* ---------------------------------------------------------- RENDER */
+
+  function render() {
+    renderInstrumentStrip();
+    renderControls();
+    renderMapStates();
+    renderLegend();
+    renderReadouts();
+    renderDetail();
+    renderWarnings();
+    setText(nodes.statusLive, state.statusMessage);
+  }
+
+  function renderInstrumentStrip() {
+    var ctx = state.context;
+    var d = ctx.data;
+
+    setCell(nodes.product,
+        d ? d.dataset.id.replace('COPERNICUS/', '') : 'unavailable',
+        d ? '' : 'pending');
+    setCell(nodes.region,
+        d && d.region.boundaryAvailable ? 'BAAQMD jurisdiction' :
+            'unavailable',
+        d ? '' : 'pending');
+    setCell(nodes.latest,
+        d ? d.availability.latestRepresentedLocalDate : 'unavailable',
+        d ? '' : 'pending');
+    setCell(nodes.lastinc,
+        d ? d.availability.lastIncludedLocalDate : 'unavailable',
+        d ? 'flagged' : 'pending');
+
+    var backendText, backendClass;
+    if (ctx.status === 'loading') {
+      backendText = 'checking…'; backendClass = 'pending';
+    } else if (ctx.status === 'ready') {
+      if (state.analysis.status === 'ee_not_ready') {
+        backendText = 'EE not ready'; backendClass = 'bad';
+      } else {
+        backendText = 'reachable'; backendClass = 'good';
+      }
+    } else if (ctx.status === 'ee_not_ready') {
+      backendText = 'EE not ready'; backendClass = 'bad';
+    } else {
+      backendText = 'unreachable'; backendClass = 'bad';
+    }
+    setCell(nodes.backend, backendText, backendClass);
+
+    setText(nodes.freshness,
+        d ? d.availability.freshnessNote : '');
+  }
+
+  function renderControls() {
+    var ctx = state.context;
+    var ready = ctx.status === 'ready';
+    var loading = state.analysis.status === 'loading';
+
+    nodes.dateInput.disabled = !ready || loading;
+    // The Load button is disabled while a request is active; the
+    // selected date stays visible in the input during loading.
+    nodes.loadButton.disabled = !ready || loading;
+    nodes.loadButton.textContent = loading ? 'Loading…' : 'Load date';
+
+    nodes.retryContext.hidden = !(ctx.status === 'ee_not_ready' ||
+        ctx.status === 'timeout' || ctx.status === 'unreachable' ||
+        ctx.status === 'error');
+
+    nodes.retryBoundary.hidden = !(state.boundary.status === 'timeout' ||
+        state.boundary.status === 'unavailable');
+
+    var a = state.analysis.status;
+    nodes.retryAnalysis.hidden = !(a === 'ee_not_ready' ||
+        a === 'upstream_error' || a === 'upstream_timeout' ||
+        a === 'timeout' || a === 'unreachable' || a === 'error');
+  }
+
+  function renderMapStates() {
+    setText(nodes.mapState, boundaryStateText());
+    setText(nodes.satLayer, anomalyStateText());
+  }
+
+  function boundaryStateText() {
+    var ctx = state.context.status;
+    if (ctx === 'loading') {
+      return 'Basemap only — waiting for the backend.';
+    }
+    if (ctx !== 'ready' && ctx !== 'ee_not_ready') {
+      return 'Basemap only. The backend could not be reached, so the ' +
+          'official boundary cannot be drawn.';
+    }
+    switch (state.boundary.status) {
+      case 'loading':
+        return 'Loading the official BAAQMD boundary…';
+      case 'ready':
+        return 'Official BAAQMD jurisdiction boundary drawn from the ' +
+            'backend asset.';
+      case 'timeout':
+        return 'Boundary unavailable — the boundary request timed ' +
+            'out. No approximate boundary is substituted.';
+      case 'unavailable':
+        return 'Boundary unavailable — ' +
+            (state.boundary.message || 'the backend could not supply ' +
+                'the official boundary') +
+            '. No approximate boundary is substituted.';
+      default:
+        return 'Basemap only — boundary not requested yet.';
+    }
+  }
+
+  function anomalyStateText() {
+    var a = state.analysis;
+    if (state.context.status !== 'ready') {
+      return 'Anomaly layer: waiting for the backend connection.';
+    }
+    if (a.status === 'idle') {
+      return 'Anomaly layer: waiting for the first analysis.';
+    }
+    if (a.status === 'loading') {
+      return 'Anomaly layer: loading analysis for ' +
+          a.requestedDate + '…';
+    }
+    if (a.status !== 'ready') {
+      return 'Anomaly layer removed — ' + analysisStateText() + '';
+    }
+    var map = a.data.map;
+    switch (map.status) {
+      case 'available':
+        return 'Sentinel-5P tropospheric NO₂ column anomaly layer ' +
+            'loaded. Local date ' + map.localDate + '; unit ' +
+            map.unit + '. Per-date display stretch — colour intensity ' +
+            'is not comparable across dates.';
+      case 'baseline_unavailable':
+        return 'Anomaly map unavailable — complete three-year ' +
+            'historical baseline is not available for this date.';
+      case 'no_products':
+        return 'Anomaly map unavailable — no source products were ' +
+            'acquired for this date.';
+      case 'no_valid_retrieval':
+        return 'Anomaly map unavailable — products exist for this ' +
+            'date but none produced a valid retrieval.';
+      case 'projection_incompatible':
+        return 'Anomaly map unavailable — this date’s source ' +
+            'grid is incompatible with the canonical lattice.';
+      case 'visualization_unavailable':
+        return 'Anomaly map unavailable — valid visualization bounds ' +
+            'could not be calculated for this date.';
+      case 'upstream_error':
+        return 'Anomaly map unavailable — the tile request failed. ' +
+            'The observation and baseline values above it stand.';
+      default:
+        return 'Anomaly map unavailable (' + map.status + ').';
+    }
+  }
+
+  /*
+   * Legend renderer. Renders ONLY from backend visualization metadata
+   * (minimum, maximum, palette stops, description): no fixed palette,
+   * numeric limits, or thresholds are invented client-side. Shows the
+   * exact min, zero, and max of the per-date stretch.
+   */
+  function renderLegend() {
+    var legend = nodes.legend;
+    if (!legend) return;
+    var a = state.analysis;
+    var vis = a.status === 'ready' && a.data.map.status === 'available' ?
+        a.data.map.visualization : null;
+    legend.innerHTML = '';
+    if (!vis || !vis.paletteStops || !vis.paletteStops.length ||
+        typeof vis.min !== 'number' || typeof vis.max !== 'number') {
+      var placeholder = document.createElement('span');
+      placeholder.className = 'bmeta';
+      placeholder.textContent = 'Anomaly legend renders from backend ' +
+          'visualization metadata when the layer loads.';
+      legend.appendChild(placeholder);
+      return;
+    }
+    var map = a.data.map;
+    var title = document.createElement('span');
+    title.className = 'bmeta';
+    title.textContent = 'Signed column anomaly (' + map.unit + ') — ' +
+        map.localDate;
+    legend.appendChild(title);
+
+    var row = document.createElement('div');
+    row.className = 'legend-row';
+    var low = document.createElement('span');
+    low.className = 'rlab';
+    low.textContent = fmtSci(vis.min);
+    row.appendChild(low);
+
+    var rampWrap = document.createElement('div');
+    rampWrap.className = 'ramp-wrap';
+    var ramp = document.createElement('div');
+    ramp.className = 'ramp';
+    ramp.setAttribute('role', 'img');
+    ramp.setAttribute('aria-label',
+        'Anomaly colour ramp from backend visualization metadata, ' +
+        'from ' + fmtSci(vis.min) + ' through zero to ' +
+        '+' + fmtSci(vis.max) + ' ' + map.unit);
+    for (var i = 0; i < vis.paletteStops.length; i++) {
+      var cell = document.createElement('i');
+      cell.style.background = '#' + String(vis.paletteStops[i]);
+      ramp.appendChild(cell);
+    }
+    rampWrap.appendChild(ramp);
+    var zero = document.createElement('span');
+    zero.className = 'rlab rzero';
+    zero.textContent = '0';
+    rampWrap.appendChild(zero);
+    row.appendChild(rampWrap);
+
+    var high = document.createElement('span');
+    high.className = 'rlab';
+    high.textContent = '+' + fmtSci(vis.max);
+    row.appendChild(high);
+    legend.appendChild(row);
+
+    var note = document.createElement('span');
+    note.className = 'bmeta';
+    note.textContent = vis.description ||
+        'Per-date display stretch from backend metadata, not a ' +
+        'threshold.';
+    legend.appendChild(note);
+  }
+
+  // One-line human state for non-ready analysis statuses.
+  function analysisStateText() {
+    var a = state.analysis;
+    switch (a.status) {
+      case 'idle': return 'Waiting for the first analysis';
+      case 'loading':
+        return 'Loading analysis for ' + a.requestedDate + '…';
+      case 'invalid_date':
+        return a.message || 'The selected date is not a valid date.';
+      case 'out_of_range':
+        return a.message ||
+            'The selected date is outside the supported range.';
+      case 'ee_not_ready':
+        return 'The backend’s Earth Engine client is not ready. ' +
+            'Retry shortly.';
+      case 'upstream_error':
+        return 'Earth Engine reported an error for this request. ' +
+            (a.message || '');
+      case 'upstream_timeout':
+        return 'The backend’s Earth Engine request timed out. ' +
+            'Retry may succeed once cached.';
+      case 'timeout':
+        return 'The analysis request timed out in the browser. The ' +
+            'backend may still be computing; retry shortly.';
+      case 'unreachable':
+        return 'The backend could not be reached.';
+      case 'error':
+        return a.message || 'Unexpected analysis failure.';
+      default: return '';
+    }
+  }
+
+  // Short reason strings for the readout unit lines when a value is
+  // null. Wording comes from the documented scientific states.
+  function observationReason(obs) {
+    switch (obs.status) {
+      case 'no_products': return 'no source products for this date';
+      case 'no_valid_retrieval':
+        return 'products exist, no valid retrieval';
+      case 'projection_incompatible':
+        return 'source grid incompatible — value withheld by design';
+      default: return 'unavailable';
+    }
+  }
+
+  function baselineReason(baseline) {
+    switch (baseline.status) {
+      case 'partial_window':
+        return 'historical window structurally partial';
+      case 'target_unavailable':
+        return 'no valid target value for this date';
+      case 'upstream_error': return 'baseline calculation failed';
+      default: return 'unavailable';
+    }
+  }
+
+  function renderReadouts() {
+    var a = state.analysis;
+    if (a.status !== 'ready') {
+      setText(nodes.readoutState, analysisStateText() ||
+          'Waiting for the first analysis');
+      setReadout(nodes.roMean, nodes.roMeanUnit, null, '');
+      setReadout(nodes.roAnom, nodes.roAnomUnit, null, '');
+      setReadout(nodes.roPct, nodes.roPctUnit, null, '');
+      setReadout(nodes.roCov, nodes.roCovUnit, null, '');
+      return;
+    }
+    var data = a.data;
+    var obs = data.observation;
+    var base = data.baseline;
+
+    setText(nodes.readoutState, 'Local date ' + data.localDate +
+        ' — observation: ' + obs.status.replace(/_/g, ' ') +
+        '; baseline: ' + base.status.replace(/_/g, ' '));
+
+    var mean = fmtSci(obs.regionalMeanNo2);
+    setReadout(nodes.roMean, nodes.roMeanUnit, mean,
+        mean !== null ? data.dataset.unit : observationReason(obs));
+
+    var anom = fmtSciSigned(base.signedAnomalyNo2);
+    setReadout(nodes.roAnom, nodes.roAnomUnit, anom,
+        anom !== null ? data.dataset.unit : baselineReason(base));
+
+    var pct = fmtPercentile(base.percentile);
+    setReadout(nodes.roPct, nodes.roPctUnit, pct,
+        pct !== null ? 'percentile (≤ convention)' :
+            baselineReason(base));
+
+    var cov = fmtCoverage(obs.validAreaFraction);
+    setReadout(nodes.roCov, nodes.roCovUnit, cov,
+        cov !== null ? 'of BAAQMD area with valid pixels' :
+            observationReason(obs));
+  }
+
+  function renderDetail() {
+    var a = state.analysis;
+    var dash = '—';
+    if (a.status !== 'ready') {
+      var pendingDate = a.requestedDate || dash;
+      setText(nodes.dDate, a.status === 'loading' ?
+          pendingDate + ' (loading…)' : pendingDate);
+      [nodes.dObs, nodes.dAssets, nodes.dProducts, nodes.dOrbits,
+       nodes.dQuality, nodes.dProj, nodes.dBaseline, nodes.dMedian,
+       nodes.dSamples, nodes.dReqYears, nodes.dContribYears]
+          .forEach(function (node) { setText(node, dash); });
+      return;
+    }
+    var data = a.data;
+    var obs = data.observation;
+    var base = data.baseline;
+
+    function show(value) {
+      return value === null || value === undefined ? dash :
+          String(value);
+    }
+
+    setText(nodes.dDate, data.localDate);
+    setText(nodes.dObs, obs.status.replace(/_/g, ' '));
+    setText(nodes.dAssets, show(obs.sourceAssetCount));
+    setText(nodes.dProducts, show(obs.distinctProductCount));
+    setText(nodes.dOrbits, show(obs.distinctOrbitCount));
+    var qualityQualifiers = [];
+    if (obs.nonNominalProductCount) {
+      qualityQualifiers.push(obs.nonNominalProductCount +
+          ' non-NOMINAL');
+    }
+    if (obs.unknownProductQualityCount) {
+      qualityQualifiers.push(obs.unknownProductQualityCount +
+          ' unknown');
+    }
+    setText(nodes.dQuality, obs.productQualityStatus.replace(/_/g, ' ') +
+        (qualityQualifiers.length ?
+            ' (' + qualityQualifiers.join(', ') + ')' : ''));
+    setText(nodes.dProj,
+        obs.projectionCompatibilityStatus.replace(/_/g, ' '));
+    setText(nodes.dBaseline, base.status.replace(/_/g, ' '));
+    var median = fmtSci(base.historicalMedianNo2);
+    setText(nodes.dMedian, median === null ? dash :
+        median + ' ' + data.dataset.unit);
+    setText(nodes.dSamples, show(base.historicalSampleCount));
+    setText(nodes.dReqYears, show(joinYears(base.requestedPriorYears)));
+    setText(nodes.dContribYears,
+        show(joinYears(base.contributingPriorYears)));
+  }
+
+  function renderWarnings() {
+    var box = nodes.warnings;
+    var a = state.analysis;
+    box.innerHTML = '';
+    if (a.status !== 'ready') { box.hidden = true; return; }
+    var data = a.data;
+    var items = [];
+
+    if (data.observation.hasNonNominalContributors) {
+      items.push('Non-NOMINAL contributors: ' +
+          data.observation.nonNominalProductCount +
+          ' contributing product(s) carry an explicit ' +
+          'PRODUCT_QUALITY other than NOMINAL. Values are retained ' +
+          'and flagged, never excluded.');
+    }
+    if (data.observation.unknownProductQualityCount) {
+      items.push('Unknown product quality: ' +
+          data.observation.unknownProductQualityCount +
+          ' contributing product(s) carry no PRODUCT_QUALITY ' +
+          'metadata. Unknown quality is reported as unknown — it is ' +
+          'not counted as non-NOMINAL — and the products are ' +
+          'retained.');
+    }
+    if (data.observation.projectionCompatibilityStatus ===
+        'incompatible') {
+      items.push('Projection incompatibility: this date’s source ' +
+          'grid failed the canonical-lattice compatibility rule' +
+          (data.observation.projectionCompatibilityDetail ?
+              ' (' + data.observation.projectionCompatibilityDetail +
+              ')' : '') +
+          '. Regional statistics and the anomaly map are withheld by ' +
+          'design rather than silently computed on a different grid.');
+    }
+    if (data.baseline.status === 'partial_window') {
+      items.push('Baseline unavailable: the previous-three-year ' +
+          'same-calendar-month window is structurally partial ' +
+          '(contributing years: ' +
+          (joinYears(data.baseline.contributingPriorYears) || 'none') +
+          '). The daily value and coverage remain; the historical ' +
+          'median, anomaly, and percentile are unavailable — not zero.');
+    }
+    if (data.map.warning) {
+      items.push('Map: ' + data.map.warning);
+    }
+
+    if (!items.length) { box.hidden = true; return; }
+    items.forEach(function (text) {
+      var p = document.createElement('p');
+      p.textContent = text;
+      box.appendChild(p);
+    });
+    box.hidden = false;
+  }
+
+  /* ------------------------------------------------------ DATA LOADING */
+
+  function setStatusMessage(text) {
+    state.statusMessage = text;
+  }
+
+  /*
+   * Step 2–3 of the page-load flow: /api/context populates dataset,
+   * region, availability, and the date-picker bounds/default. The
+   * frontend never assumes "today" is available — the backend's last
+   * included local date is authoritative.
+   */
+  function loadContext() {
+    var token = ++contextToken;
+    state.context = {status: 'loading', data: null, message: null};
+    setStatusMessage('Loading dataset context from the backend…');
+    render();
+
+    var holder = {controller: new AbortController(), timedOut: false};
+    fetchJson(CONFIG.backendOrigin + '/api/context',
+        CONFIG.contextTimeoutMs, holder)
+        .then(function (result) {
+          if (token !== contextToken) return;
+          if (result.httpStatus === 200 && result.body &&
+              result.body.ok) {
+            state.context = {status: 'ready', data: result.body,
+                             message: null};
+            configureDatePicker(result.body);
+            setStatusMessage('Context loaded. Loading the official ' +
+                'boundary and the default date…');
+            render();
+            loadBoundary();
+            loadAnalysis(result.body.availability.defaultLocalDate);
+            return;
+          }
+          if (result.httpStatus === 503) {
+            state.context = {status: 'ee_not_ready', data: null,
+                message: errorMessageFrom(result,
+                    'Earth Engine is not ready.')};
+            setStatusMessage('The backend is up, but its Earth Engine ' +
+                'client is not ready. Retry shortly.');
+          } else {
+            state.context = {status: 'error', data: null,
+                message: errorMessageFrom(result, 'Backend returned ' +
+                    'HTTP ' + result.httpStatus + '.')};
+            setStatusMessage('Could not load the dataset context: ' +
+                state.context.message);
+          }
+          render();
+        })
+        .catch(function (error) {
+          if (token !== contextToken) return;
+          if (isAbortError(error) && !holder.timedOut) return;
+          state.context = {
+            status: holder.timedOut ? 'timeout' : 'unreachable',
+            data: null,
+            message: String(error && error.message || error)
+          };
+          setStatusMessage(holder.timedOut ?
+              'The context request timed out.' :
+              'The backend could not be reached.');
+          render();
+          console.warn('[context] failed:', state.context.message);
+        });
+  }
+
+  function configureDatePicker(context) {
+    var input = nodes.dateInput;
+    input.min = context.dataset.collectionStartLocalDate;
+    input.max = context.availability.lastIncludedLocalDate;
+    // Keep a user's already-chosen date across context retries; only
+    // seed the default when the input is empty or out of range.
+    if (!input.value || input.value < input.min ||
+        input.value > input.max) {
+      input.value = context.availability.defaultLocalDate;
+    }
+  }
+
+  /* Step 4–5: /api/boundary → the official BAAQMD GeoJSON layer. */
+  function loadBoundary() {
+    var token = ++boundaryToken;
+    state.boundary = {status: 'loading', message: null};
+    render();
+
+    var holder = {controller: new AbortController(), timedOut: false};
+    fetchJson(CONFIG.backendOrigin + '/api/boundary',
+        CONFIG.boundaryTimeoutMs, holder)
+        .then(function (result) {
+          if (token !== boundaryToken) return;
+          if (result.httpStatus === 200 && result.body &&
+              result.body.ok && result.body.geojson) {
+            setBoundaryLayer(result.body.geojson);
+            state.boundary = {status: 'ready', message: null};
+            setStatusMessage('Official boundary loaded.');
+          } else {
+            state.boundary = {status: 'unavailable',
+                message: errorMessageFrom(result, 'the backend ' +
+                    'returned HTTP ' + result.httpStatus)};
+            setStatusMessage('The official boundary is unavailable.');
+          }
+          render();
+        })
+        .catch(function (error) {
+          if (token !== boundaryToken) return;
+          if (isAbortError(error) && !holder.timedOut) return;
+          state.boundary = {
+            status: holder.timedOut ? 'timeout' : 'unavailable',
+            message: String(error && error.message || error)
+          };
+          setStatusMessage('The official boundary could not be ' +
+              'loaded.');
+          render();
+          console.warn('[boundary] failed:', state.boundary.message);
+        });
+  }
+
+  /*
+   * Step 6–7: /api/analysis?date=… for the default date, then for any
+   * user-selected supported date. An older in-flight request is
+   * aborted when a new date is requested; the token guarantees a late
+   * response can never overwrite the current selection.
+   */
+  function loadAnalysis(dateStr) {
+    if (state.context.status !== 'ready') return;
+
+    var token = ++analysisToken;
+    if (analysisRequest) analysisRequest.controller.abort();
+    var holder = {controller: new AbortController(), timedOut: false};
+    analysisRequest = holder;
+
+    state.analysis = {status: 'loading', data: null, message: null,
+                      requestedDate: dateStr};
+    // Date-changing state: the previous date's anomaly tiles come off
+    // the map immediately — no stale layer may sit under a "loading"
+    // message that describes a different date.
+    removeAnomalyLayer();
+    setStatusMessage('Loading analysis for ' + dateStr + '…');
+    render();
+
+    fetchJson(CONFIG.backendOrigin + '/api/analysis?date=' +
+        encodeURIComponent(dateStr), CONFIG.analysisTimeoutMs, holder)
+        .then(function (result) {
+          if (token !== analysisToken) return;
+          applyAnalysisResult(dateStr, result);
+          render();
+        })
+        .catch(function (error) {
+          if (token !== analysisToken) return;
+          if (isAbortError(error) && !holder.timedOut) return;
+          removeAnomalyLayer();
+          state.analysis = {
+            status: holder.timedOut ? 'timeout' : 'unreachable',
+            data: null,
+            message: String(error && error.message || error),
+            requestedDate: dateStr
+          };
+          setStatusMessage(holder.timedOut ?
+              'The analysis request for ' + dateStr + ' timed out.' :
+              'The backend could not be reached for ' + dateStr + '.');
+          render();
+          console.warn('[analysis] failed:', state.analysis.message);
+        });
+  }
+
+  function applyAnalysisResult(dateStr, result) {
+    var status = result.httpStatus;
+    var body = result.body;
+
+    if (status === 200 && body && body.ok) {
+      state.analysis = {status: 'ready', data: body, message: null,
+                        requestedDate: dateStr};
+      if (body.map.status === 'available' && body.map.tileUrlTemplate) {
+        // Remove the prior date's layer, then add the new one — the
+        // anomaly layer is never stacked.
+        setAnomalyLayer(body.map);
+      } else {
+        // Any unavailable state removes stale tiles immediately.
+        removeAnomalyLayer();
+      }
+      setStatusMessage('Analysis loaded for ' + body.localDate + '.');
+      return;
+    }
+
+    removeAnomalyLayer();
+    var mapped;
+    if (status === 400) mapped = 'invalid_date';
+    else if (status === 422) mapped = 'out_of_range';
+    else if (status === 503) mapped = 'ee_not_ready';
+    else if (status === 502) mapped = 'upstream_error';
+    else if (status === 504) mapped = 'upstream_timeout';
+    else mapped = 'error';
+    state.analysis = {
+      status: mapped,
+      data: null,
+      message: errorMessageFrom(result,
+          'Backend returned HTTP ' + status + '.'),
+      requestedDate: dateStr
+    };
+    setStatusMessage('Analysis for ' + dateStr + ' unavailable: ' +
+        analysisStateText());
+  }
+
+  /* ------------------------------------------------------ INTERACTION */
+
+  function onLoadClicked() {
+    var value = nodes.dateInput.value;
+    if (!DATE_RE.test(value)) {
+      state.analysis = {status: 'invalid_date', data: null,
+          message: 'Enter a complete date as YYYY-MM-DD.',
+          requestedDate: value || null};
+      removeAnomalyLayer();
+      setStatusMessage('The selected date is not a valid date.');
+      render();
+      return;
+    }
+    var ctx = state.context.data;
+    if (ctx && (value < ctx.dataset.collectionStartLocalDate ||
+        value > ctx.availability.lastIncludedLocalDate)) {
+      state.analysis = {status: 'out_of_range', data: null,
+          message: 'Supported local dates run from ' +
+              ctx.dataset.collectionStartLocalDate + ' to ' +
+              ctx.availability.lastIncludedLocalDate +
+              ' (the newest represented date is conservatively ' +
+              'excluded).',
+          requestedDate: value};
+      removeAnomalyLayer();
+      setStatusMessage('The selected date is outside the supported ' +
+          'range.');
+      render();
+      return;
+    }
+    loadAnalysis(value);
+  }
+
+  function wireEvents() {
+    nodes.loadButton.addEventListener('click', onLoadClicked);
+    nodes.dateInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' && !nodes.loadButton.disabled) {
+        onLoadClicked();
+      }
+    });
+    nodes.retryContext.addEventListener('click', loadContext);
+    nodes.retryBoundary.addEventListener('click', loadBoundary);
+    nodes.retryAnalysis.addEventListener('click', function () {
+      var date = state.analysis.requestedDate || nodes.dateInput.value;
+      if (date) loadAnalysis(date);
+    });
   }
 
   /* ------------------------------------------------------------- INIT */
@@ -233,7 +970,8 @@
   function init() {
     render();
     initMap();
-    checkBackend();
+    wireEvents();
+    loadContext();
   }
 
   if (document.readyState === 'loading') {

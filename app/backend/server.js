@@ -1,53 +1,32 @@
 /*
- * Bay Area Air Quality Episode Finder
- * Railway backend — Earth Engine PROOF OF CONNECTION (first deployment
- * target, owner-decided 2026-07-19).
+ * Bay Area Air Quality Episode Finder — Railway backend.
+ * HTTP layer: startup, routing, CORS, response helpers, and Earth
+ * Engine readiness gating. First vertical slice (2026-07-20).
  *
- * Purpose: INFRASTRUCTURE ONLY. Verifies that the decided architecture's
- * pipe works end to end:
- *   Railway backend → service-account authentication → Google Earth
- *   Engine → a trivial response back out as JSON.
- * It performs NO scientific processing: no composites, no regional
- * statistics, no baselines, no anomalies, no thresholds, and no episode
- * logic. The two Earth Engine calls it makes are cheap metadata queries
- * (a filtered feature count and a property aggregation) chosen only to
- * prove (a) the service account can read the official BAAQMD boundary
- * asset — required by docs/architecture.md before public deployment —
- * and (b) the Sentinel-5P OFFL collection is reachable.
- *
- * Framework note: the backend FRAMEWORK is still an open owner decision
- * (docs/architecture.md), so this proof deliberately uses only Node's
- * built-in http module. Nothing here locks in Express, Fastify, or any
- * other choice.
- *
- * Authentication (per the official Earth Engine npm guide):
- *   - Node.js supports server-side service-account auth only:
- *     ee.data.authenticateViaPrivateKey(key, success, error) followed by
- *     ee.initialize(null, null, success, error, null, projectId).
- *   - The private key is read from an environment variable or a file
- *     path environment variable — NEVER from the repository. Repo
- *     .gitignore already blocks *credentials*.json and .env*.
- *
- * Environment variables:
- *   PORT                        - listen port (Railway injects this).
- *   EE_PROJECT_ID               - Google Cloud project ID registered for
- *                                 Earth Engine. Defaults to the boundary
- *                                 asset's project.
- *   EE_SERVICE_ACCOUNT_KEY      - the service-account JSON key, pasted
- *                                 verbatim (Railway variables handle
- *                                 multi-line values). Preferred on
- *                                 Railway.
- *   EE_SERVICE_ACCOUNT_KEY_FILE - path to the JSON key file. Convenient
- *                                 for local runs; keep the file OUTSIDE
- *                                 the repository directory.
- * If both are set, EE_SERVICE_ACCOUNT_KEY wins. If neither is set, the
- * server still boots and reports "not_configured" so a misconfigured
- * deploy is diagnosable from the outside.
+ * Module structure (kept deliberately small; Node's built-in http
+ * module only — no Express/Fastify/TypeScript/database):
+ *   server.js       — this file (HTTP, routing, CORS, error mapping)
+ *   earth-engine.js — Earth Engine auth state machine + async
+ *                     evaluate/getMap Promise wrappers with timeouts
+ *   analysis.js     — dataset constants, boundary, date availability,
+ *                     daily observation, baseline, anomaly map, caches
  *
  * Endpoints:
- *   GET /            - service description.
- *   GET /healthz     - liveness + current Earth Engine client state.
- *   GET /api/ee-check - the proof of connection (503 until EE is ready).
+ *   GET /              service description
+ *   GET /healthz       liveness + Earth Engine client state
+ *   GET /api/ee-check  legacy infrastructure proof of connection
+ *   GET /api/context   dataset/availability/region bootstrap
+ *   GET /api/boundary  official BAAQMD boundary GeoJSON
+ *   GET /api/analysis  one-local-date observation/baseline/anomaly map
+ *
+ * Behavior preserved from the proof-of-connection stage:
+ *   - boots without credentials (/healthz reports not_configured);
+ *   - no crash loop after authentication or Earth Engine failures;
+ *   - service-account credentials only via environment variables/file
+ *     paths, never in the repository and never echoed;
+ *   - no synchronous Earth Engine requests in request handlers — all
+ *     Earth Engine work goes through the async Promise wrappers in
+ *     earth-engine.js, each with its own timeout.
  *
  * Project docs: https://github.com/perez-eduardo/Bay-Area-Air-Quality-Episode-Finder
  */
@@ -55,36 +34,17 @@
 'use strict';
 
 var http = require('http');
-var fs = require('fs');
-var ee = require('@google/earthengine');
+var eeClient = require('./earth-engine');
+var analysis = require('./analysis');
+var ee = eeClient.ee;
 
 /* ------------------------------------------------------------------ CONFIG */
 
 var CONFIG = {
   port: Number(process.env.PORT) || 8080,
 
-  // Google Cloud project ID passed to ee.initialize(). Default: the
-  // project that holds the boundary asset (owner-advised choice for the
-  // proof of connection; override with EE_PROJECT_ID).
-  eeProjectId: process.env.EE_PROJECT_ID || 'thematic-carver-502603-k5',
-
-  // Official BAAQMD jurisdiction boundary (docs/data-sources.md). The
-  // proof verifies the service account can READ this asset; it does not
-  // process it.
-  boundaryAssetId:
-      'projects/thematic-carver-502603-k5/assets/ca_air_district_boundaries',
-  boundaryField: 'Air_Distri',
-  boundaryValue: 'BAY AREA AQMD',
-
-  // First dataset (owner-decided; docs/data-sources.md). Only a property
-  // aggregation is run against it here.
-  collectionId: 'COPERNICUS/S5P/OFFL/L3_NO2',
-
-  // Local calendar convention used across the project.
-  timeZone: 'America/Los_Angeles',
-
-  // Upper bound for one diagnostic Earth Engine round trip.
-  eeCallTimeoutMs: 60000,
+  // Upper bound for one legacy diagnostic Earth Engine round trip.
+  eeCheckTimeoutMs: 60000,
 
   /*
    * Browser origins permitted to read this API cross-origin. The
@@ -94,7 +54,9 @@ var CONFIG = {
    * today, but a wildcard would silently keep granting access to any
    * origin if authenticated or rate-limited endpoints are added later.
    * Extra origins can be supplied through ALLOWED_ORIGINS as a
-   * comma-separated list.
+   * comma-separated list. NOTE: when ALLOWED_ORIGINS is set (as it is
+   * on Railway), it REPLACES the defaults below — the chosen frontend
+   * origin must be added to the Railway variable once it exists.
    */
   allowedOrigins: (process.env.ALLOWED_ORIGINS ||
       'https://neuralnetworks.me,https://www.neuralnetworks.me')
@@ -104,151 +66,49 @@ var CONFIG = {
       .concat(['http://localhost:8081', 'http://127.0.0.1:8081'])
 };
 
-// Fixed language for every response. Careful-claims policy
-// (docs/methodology.md): this endpoint returns infrastructure
+// Fixed language for the legacy proof endpoint. Careful-claims policy
+// (docs/methodology.md): that endpoint returns infrastructure
 // diagnostics only.
 var PURPOSE_NOTE =
     'Infrastructure proof of connection only. No scientific processing, ' +
     'statistics, baselines, anomalies, thresholds, or episode logic runs ' +
     'here, and nothing in this response is an air-quality result.';
 
-/* ---------------------------------------------------- EARTH ENGINE CLIENT */
+var ENDPOINTS = ['/', '/healthz', '/api/ee-check', '/api/context',
+                 '/api/boundary', '/api/analysis?date=YYYY-MM-DD'];
+
+/* ---------------------------------------------------- LEGACY PROOF CHECK */
 
 /*
- * Earth Engine client state machine. The server always boots; the state
- * tells callers exactly where authentication stands:
- *   not_configured - no key material provided;
- *   authenticating - authenticateViaPrivateKey in flight;
- *   initializing   - ee.initialize in flight;
- *   ready          - client usable;
- *   error          - authentication or initialization failed (message
- *                    retained; the key itself is never echoed).
- */
-var eeState = {
-  status: 'not_configured',
-  detail: 'No service-account key provided. Set EE_SERVICE_ACCOUNT_KEY ' +
-      '(JSON contents) or EE_SERVICE_ACCOUNT_KEY_FILE (path).',
-  since: new Date().toISOString()
-};
-
-function setEeState(status, detail) {
-  eeState = {status: status, detail: detail, since: new Date().toISOString()};
-  console.log('[ee] ' + status + (detail ? ' — ' + detail : ''));
-}
-
-// Reads the key from the environment. Returns the parsed key object or
-// null. Never logs or returns key contents; parse failures report only
-// the failure class.
-function readServiceAccountKey() {
-  var raw = null;
-  var source = null;
-  if (process.env.EE_SERVICE_ACCOUNT_KEY) {
-    raw = process.env.EE_SERVICE_ACCOUNT_KEY;
-    source = 'EE_SERVICE_ACCOUNT_KEY';
-  } else if (process.env.EE_SERVICE_ACCOUNT_KEY_FILE) {
-    source = 'EE_SERVICE_ACCOUNT_KEY_FILE';
-    try {
-      raw = fs.readFileSync(process.env.EE_SERVICE_ACCOUNT_KEY_FILE, 'utf8');
-    } catch (readError) {
-      setEeState('error', 'Could not read the key file at ' +
-          'EE_SERVICE_ACCOUNT_KEY_FILE (' + readError.code + ').');
-      return null;
-    }
-  } else {
-    return null; // stays not_configured
-  }
-  try {
-    var key = JSON.parse(raw);
-    if (!key.client_email || !key.private_key) {
-      setEeState('error', 'The value from ' + source + ' parsed as JSON ' +
-          'but does not look like a service-account key (missing ' +
-          'client_email or private_key).');
-      return null;
-    }
-    return key;
-  } catch (parseError) {
-    setEeState('error', 'The value from ' + source + ' is not valid JSON.');
-    return null;
-  }
-}
-
-// Server-side auth + init, per the official npm guide (async callbacks
-// only; no synchronous Earth Engine calls anywhere in this server).
-function startEarthEngine() {
-  var key = readServiceAccountKey();
-  if (key === null) return;
-
-  setEeState('authenticating',
-      'Authenticating as ' + key.client_email + '.');
-  ee.data.authenticateViaPrivateKey(key, function () {
-    setEeState('initializing',
-        'Initializing with project ' + CONFIG.eeProjectId + '.');
-    ee.initialize(null, null, function () {
-      setEeState('ready', 'Authenticated as ' + key.client_email +
-          '; project ' + CONFIG.eeProjectId + '.');
-    }, function (initError) {
-      setEeState('error', 'ee.initialize failed: ' + initError);
-    }, null, CONFIG.eeProjectId);
-  }, function (authError) {
-    setEeState('error',
-        'authenticateViaPrivateKey failed: ' + authError);
-  });
-}
-
-/* ------------------------------------------------------- DIAGNOSTIC CALLS */
-
-// Wraps one callback-style evaluate() in a Promise with a timeout. An
-// Earth Engine evaluation cannot be cancelled; on timeout the caller
-// just stops waiting and says so.
-function evaluateWithTimeout(eeObject, label) {
-  return new Promise(function (resolve) {
-    var settled = false;
-    var timer = setTimeout(function () {
-      if (settled) return;
-      settled = true;
-      resolve({ok: false, error: label + ' timed out after ' +
-          CONFIG.eeCallTimeoutMs + ' ms (the request may still be ' +
-          'running server-side).'});
-    }, CONFIG.eeCallTimeoutMs);
-    eeObject.evaluate(function (result, error) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (error) {
-        resolve({ok: false, error: String(error)});
-      } else {
-        resolve({ok: true, value: result});
-      }
-    });
-  });
-}
-
-/*
- * The proof of connection. Two independent cheap queries, run in
- * parallel and reported separately so a boundary-permission problem is
- * distinguishable from a collection-access problem:
- *   1) boundary  - count of features matching the BAAQMD filter in the
- *                  official boundary asset (verifies the service
- *                  account can READ the asset; expected count: 1).
- *   2) collection - the latest represented local calendar date in the
- *                  OFFL collection (property aggregation over
- *                  system:time_start, formatted in America/Los_Angeles;
- *                  global collection maximum, unfiltered — the same
- *                  cheap anchor style the exploration scripts use).
+ * The original proof of connection, retained unchanged in behavior:
+ * two independent cheap queries, run in parallel and reported
+ * separately so a boundary-permission problem is distinguishable from
+ * a collection-access problem.
  */
 function runEeCheck() {
-  var boundaryCount = ee.FeatureCollection(CONFIG.boundaryAssetId)
-      .filter(ee.Filter.eq(CONFIG.boundaryField, CONFIG.boundaryValue))
+  var C = analysis.CONSTANTS;
+  var boundaryCount = ee.FeatureCollection(C.boundaryAssetId)
+      .filter(ee.Filter.eq(C.boundaryField, C.boundaryValue))
       .size();
 
   var latestLocalDate = ee.Date(
-      ee.ImageCollection(CONFIG.collectionId)
+      ee.ImageCollection(C.datasetId)
           .aggregate_max('system:time_start'))
-      .format('yyyy-MM-dd', CONFIG.timeZone);
+      .format('yyyy-MM-dd', C.timeZone);
+
+  function settle(promise, label) {
+    return promise.then(function (value) {
+      return {ok: true, value: value};
+    }).catch(function (error) {
+      return {ok: false, error: String(error && error.message || error)};
+    });
+  }
 
   return Promise.all([
-    evaluateWithTimeout(boundaryCount, 'Boundary-asset check'),
-    evaluateWithTimeout(latestLocalDate, 'Collection check')
+    settle(eeClient.evaluate(boundaryCount, 'Boundary-asset check',
+        CONFIG.eeCheckTimeoutMs)),
+    settle(eeClient.evaluate(latestLocalDate, 'Collection check',
+        CONFIG.eeCheckTimeoutMs))
   ]).then(function (results) {
     var boundary = results[0];
     var collection = results[1];
@@ -256,19 +116,19 @@ function runEeCheck() {
       service: 'baaqef-backend',
       check: 'earth-engine-proof-of-connection',
       timestampUtc: new Date().toISOString(),
-      eeProjectId: CONFIG.eeProjectId,
+      eeProjectId: eeClient.getProjectId(),
       boundary: {
-        assetId: CONFIG.boundaryAssetId,
-        filter: CONFIG.boundaryField + ' == "' + CONFIG.boundaryValue + '"',
+        assetId: C.boundaryAssetId,
+        filter: C.boundaryField + ' == "' + C.boundaryValue + '"',
         readable: boundary.ok,
         matchingFeatureCount: boundary.ok ? boundary.value : null,
         error: boundary.ok ? null : boundary.error
       },
       collection: {
-        id: CONFIG.collectionId,
+        id: C.datasetId,
         reachable: collection.ok,
         latestRepresentedLocalDate: collection.ok ? collection.value : null,
-        latestDateNote: 'Latest local calendar date (' + CONFIG.timeZone +
+        latestDateNote: 'Latest local calendar date (' + C.timeZone +
             ') represented in the collection, from a global ' +
             'system:time_start property aggregation. A represented date ' +
             'is not a statement about valid Bay Area data.',
@@ -303,8 +163,143 @@ function sendJson(res, statusCode, body) {
   res.end(payload);
 }
 
+// Structured 503 for every Earth Engine-backed route while the client
+// is not ready. The state detail makes a misconfigured deploy
+// diagnosable from the outside without exposing key material.
+function sendNotReady(res) {
+  sendJson(res, 503, {
+    ok: false,
+    error: {
+      code: 'ee_not_ready',
+      message: 'The Earth Engine client is not ready.'
+    },
+    earthEngine: eeClient.getState()
+  });
+}
+
+/*
+ * Maps the structured errors thrown by earth-engine.js/analysis.js to
+ * HTTP statuses:
+ *   timeout  -> 504  (an Earth Engine round trip exceeded its budget)
+ *   upstream -> 502  (Earth Engine / boundary / collection failure)
+ *   anything else -> 500 (unexpected backend failure)
+ * Never echoes credentials; messages come from the wrappers only.
+ */
+function sendUpstreamError(res, error) {
+  var kind = error && error.isAppError ? error.kind : 'internal';
+  var status = kind === 'timeout' ? 504 :
+      kind === 'upstream' ? 502 : 500;
+  var code = kind === 'timeout' ? 'upstream_timeout' :
+      kind === 'upstream' ? 'upstream_error' : 'internal_error';
+  sendJson(res, status, {
+    ok: false,
+    error: {
+      code: code,
+      message: String(error && error.message || error)
+    }
+  });
+}
+
+/* ----------------------------------------------------------- API ROUTES */
+
+function handleContext(res) {
+  if (!eeClient.isReady()) { sendNotReady(res); return; }
+  analysis.getContext().then(function (context) {
+    sendJson(res, 200, context);
+  }).catch(function (error) {
+    sendUpstreamError(res, error);
+  });
+}
+
+function handleBoundary(res) {
+  if (!eeClient.isReady()) { sendNotReady(res); return; }
+  analysis.getBoundary().then(function (boundary) {
+    sendJson(res, 200, boundary);
+  }).catch(function (error) {
+    sendUpstreamError(res, error);
+  });
+}
+
+/*
+ * GET /api/analysis?date=YYYY-MM-DD
+ * Validation order (documented contract):
+ *   400 — malformed date (not a real YYYY-MM-DD calendar date);
+ *   422 — well-formed but before the collection start;
+ *   503 — Earth Engine not ready (the upper range bound is
+ *         backend-authoritative and needs Earth Engine);
+ *   422 — after the current last included local date;
+ *   200 — always, for supported dates: a scientifically unavailable
+ *         date is a scientific status, never an HTTP error.
+ * Timeout budget: worst case = contextTimeoutMs (60 s, only when the
+ * context cache is cold) + analysisDeadlineMs (480 s, one overall
+ * deadline clamping every analysis sub-operation) = 540 s. The
+ * frontend's outer analysis timeout (600 s) is deliberately longer.
+ */
+function handleAnalysis(res, query) {
+  var C = analysis.CONSTANTS;
+  var date = query.get('date');
+  if (!analysis._pure.isValidDateString(date)) {
+    sendJson(res, 400, {
+      ok: false,
+      error: {
+        code: 'malformed_date',
+        message: 'The date parameter must be a valid YYYY-MM-DD ' +
+            'local calendar date.'
+      }
+    });
+    return;
+  }
+  if (date < C.collectionStartLocalDate) {
+    sendJson(res, 422, {
+      ok: false,
+      error: {
+        code: 'date_out_of_range',
+        message: 'Dates before the collection start (' +
+            C.collectionStartLocalDate + ') are not supported.'
+      },
+      supportedRange: {
+        firstLocalDate: C.collectionStartLocalDate,
+        lastIncludedLocalDate: null
+      }
+    });
+    return;
+  }
+  if (!eeClient.isReady()) { sendNotReady(res); return; }
+
+  // The upper bound comes from the same cached context the frontend
+  // uses, so both sides always agree on the last included date.
+  analysis.getContext().then(function (context) {
+    var lastIncluded = context.availability.lastIncludedLocalDate;
+    if (date > lastIncluded) {
+      sendJson(res, 422, {
+        ok: false,
+        error: {
+          code: 'date_out_of_range',
+          message: 'The requested date is after the last included ' +
+              'local date (' + lastIncluded + '). The newest ' +
+              'represented date is conservatively excluded because ' +
+              'its ingestion may still be partial.'
+        },
+        supportedRange: {
+          firstLocalDate: C.collectionStartLocalDate,
+          lastIncludedLocalDate: lastIncluded
+        }
+      });
+      return;
+    }
+    return analysis.getAnalysis(date).then(function (body) {
+      sendJson(res, 200, body);
+    });
+  }).catch(function (error) {
+    sendUpstreamError(res, error);
+  });
+}
+
+/* -------------------------------------------------------------- ROUTING */
+
 var server = http.createServer(function (req, res) {
-  var path = req.url.split('?')[0];
+  var parsed = new URL(req.url, 'http://localhost');
+  var path = parsed.pathname;
 
   applyCors(req, res);
 
@@ -327,9 +322,10 @@ var server = http.createServer(function (req, res) {
     sendJson(res, 200, {
       service: 'baaqef-backend',
       project: 'Bay Area Air Quality Episode Finder',
-      stage: 'proof of connection (no application features yet)',
-      endpoints: ['/healthz', '/api/ee-check'],
-      note: PURPOSE_NOTE,
+      stage: 'first vertical slice: one-local-date observation, ' +
+          'baseline, and anomaly-map API',
+      endpoints: ENDPOINTS,
+      disclaimer: analysis.CONSTANTS.scientificDisclaimer,
       docs: 'https://github.com/perez-eduardo/' +
           'Bay-Area-Air-Quality-Episode-Finder'
     });
@@ -339,15 +335,15 @@ var server = http.createServer(function (req, res) {
   if (path === '/healthz') {
     // Liveness is about the HTTP process, so this is always 200; the
     // Earth Engine client state rides along for diagnosis.
-    sendJson(res, 200, {status: 'ok', earthEngine: eeState});
+    sendJson(res, 200, {status: 'ok', earthEngine: eeClient.getState()});
     return;
   }
 
   if (path === '/api/ee-check') {
-    if (eeState.status !== 'ready') {
+    if (!eeClient.isReady()) {
       sendJson(res, 503, {
         error: 'Earth Engine client is not ready.',
-        earthEngine: eeState,
+        earthEngine: eeClient.getState(),
         note: PURPOSE_NOTE
       });
       return;
@@ -364,13 +360,19 @@ var server = http.createServer(function (req, res) {
     return;
   }
 
-  sendJson(res, 404, {error: 'Not found.',
-                      endpoints: ['/', '/healthz', '/api/ee-check']});
+  if (path === '/api/context') { handleContext(res); return; }
+  if (path === '/api/boundary') { handleBoundary(res); return; }
+  if (path === '/api/analysis') {
+    handleAnalysis(res, parsed.searchParams);
+    return;
+  }
+
+  sendJson(res, 404, {error: 'Not found.', endpoints: ENDPOINTS});
 });
 
 /* -------------------------------------------------------------------- INIT */
 
 server.listen(CONFIG.port, function () {
   console.log('[http] baaqef-backend listening on port ' + CONFIG.port);
-  startEarthEngine();
+  eeClient.start();
 });
