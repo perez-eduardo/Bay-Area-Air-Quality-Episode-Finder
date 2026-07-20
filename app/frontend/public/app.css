@@ -243,8 +243,10 @@ footer .attrib { font-family: var(--mono); font-size: 12px; }
 .dlg-close:hover { color: var(--base); background: var(--gray-lightest); }
 .dlg-close:focus-visible { outline: 3px solid var(--primary); outline-offset: 0; }
 .dlg-text { font-size: 15px; color: var(--gray-dark); line-height: 1.6; margin: 0 0 18px; }
-.contact-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.contact-list li { font-size: 15px; color: var(--gray-dark); }
+.contact-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 13px; }
+/* [icon] [link text] rows with one consistent icon column. */
+.contact-list li { display: flex; align-items: center; gap: 11px; font-size: 15px; color: var(--gray-dark); }
+.contact-list svg { flex: none; width: 20px; height: 20px; color: var(--primary-darker); }
 .contact-list a { color: var(--primary-darker); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .contact-list a:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 .dlg-foot { margin-top: 20px; padding-top: 13px; border-top: var(--edge); font-size: 12.5px; color: var(--gray); }

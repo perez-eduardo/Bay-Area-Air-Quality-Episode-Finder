@@ -731,17 +731,20 @@ test('static markup: no navigation bar or EP mark; one plain About ' +
 
   // Native dialog with labelled heading and accessible close control.
   assert.match(html, /<dialog id="aboutDialog" aria-labelledby="aboutTitle">/);
-  assert.match(html, /<h2 id="aboutTitle">Eduardo Perez<\/h2>/);
+  assert.match(html, /<h2 id="aboutTitle">About<\/h2>/);
+  // The heading is "About", never the developer's name.
+  assert.doesNotMatch(html, /<h2 id="aboutTitle">Eduardo/);
+  assert.doesNotMatch(html, /<h2 id="aboutTitle">About Eduardo/);
   assert.match(html,
       /<button type="button" class="dlg-close" id="aboutClose"\s+aria-label="Close About dialog">/);
   assert.match(css, /#aboutDialog::backdrop/);
 
   // Exact concise paragraph and footer texts.
   assert.ok(flat.indexOf('Bay Area Air Quality Episode Finder is an ' +
-      'independent web application for exploring daily Sentinel-5P ' +
-      'tropospheric NO₂ column anomalies across the Bay Area. It ' +
-      'provides historical comparison and data coverage for each ' +
-      'selected date.') !== -1);
+      'independent web application by Eduardo Perez for exploring ' +
+      'daily Sentinel-5P tropospheric NO₂ column anomalies across ' +
+      'the Bay Area. It provides historical comparison and data ' +
+      'coverage for each selected date.') !== -1);
   assert.ok(flat.indexOf('© 2026 Eduardo Perez') !== -1);
   assert.ok(flat.indexOf('Independent project. Not affiliated with ' +
       'or endorsed by BAAQMD, EPA, Google, Copernicus, or ' +
@@ -749,15 +752,37 @@ test('static markup: no navigation bar or EP mark; one plain About ' +
   assert.ok(flat.indexOf('Contains modified Copernicus Sentinel ' +
       'data. Map data © OpenStreetMap contributors.') !== -1);
 
-  // Exact contacts; plain descriptive repository label.
+  // Exact contacts; exact visible labels.
   assert.match(html, /href="mailto:eduardojr\.perez@sjsu\.edu"/);
   assert.ok(html.indexOf('eduardojr.perez@sjsu.edu</a>') !== -1);
   assert.ok(html.indexOf(
       'https://www.linkedin.com/in/perez-eduardo/') !== -1);
+  assert.ok(html.indexOf('>LinkedIn</a>') !== -1); // label: "LinkedIn"
   assert.ok(html.indexOf('https://github.com/perez-eduardo/' +
       'Bay-Area-Air-Quality-Episode-Finder') !== -1);
   assert.ok(html.indexOf(
       'View the application source repository</a>') !== -1);
+
+  // Contact icons: three inline SVGs, one per row, each decorative
+  // (aria-hidden, focusable=false, currentColor), with the expected
+  // glyph per row: envelope / LinkedIn mark / GitHub mark.
+  var dialogOnly = html.match(/<dialog[\s\S]*?<\/dialog>/)[0];
+  var rows = dialogOnly.match(/<li>[\s\S]*?<\/li>/g) || [];
+  assert.equal(rows.length, 3);
+  rows.forEach(function (row) {
+    var svg = row.match(/<svg[^>]*>/);
+    assert.ok(svg, 'contact row has an inline svg');
+    assert.match(svg[0], /aria-hidden="true"/);
+    assert.match(svg[0], /focusable="false"/);
+    assert.match(svg[0], /width="20" height="20"/);
+    assert.match(row, /currentColor/);
+  });
+  assert.match(rows[0], /M3 5h18v14H3z/);          // envelope
+  assert.match(rows[0], /mailto:/);
+  assert.match(rows[1], /M4\.98 4\.5a2\.49/);      // LinkedIn mark
+  assert.match(rows[1], /linkedin\.com/);
+  assert.match(rows[2], /M8 0C3\.58 0 0 3\.58/);   // GitHub mark
+  assert.match(rows[2], /github\.com/);
 
   // None of the removed wording appears anywhere on the page.
   assert.doesNotMatch(flat, /NASA/i);
