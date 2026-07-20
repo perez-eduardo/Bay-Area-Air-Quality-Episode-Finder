@@ -33,3 +33,9 @@ venv/
 
 # Node (if the landing page uses a JS toolchain later)
 node_modules/
+
+
+
+*key*.json
+*-key.json
+service-account*.json
