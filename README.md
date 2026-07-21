@@ -78,7 +78,7 @@ Full definitions, audit results, and limitations are in
   [app/frontend/README.md](app/frontend/README.md).
 - Hosting: two Railway services; DNS in AWS Route 53.
 
-## Run locally
+## Running locally
 
 Backend first (needs an Earth Engine service-account key; see
 [app/backend/README.md](app/backend/README.md)):
