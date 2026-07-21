@@ -1,4 +1,4 @@
-# Bay Area Air Quality Episode Finder — Initial App Overview
+# Bay Area Air Quality Episode Finder: Initial App Overview
 
 ## Project idea
 
@@ -18,7 +18,7 @@ The app should help answer questions such as:
 
 ## Purpose of the app
 
-The main purpose is to build a transparent Earth-observation and data-analysis project that can be discussed in an interview. The app should show more than a map. It should show the reasoning behind the analysis, the data sources used, and the limitations of the conclusions.
+The main purpose is to build a transparent Earth-observation and data-analysis project that can be discussed in an interview. The app should show the reasoning behind the analysis, the data sources used, and the limitations of the conclusions, not only a map.
 
 The project should demonstrate:
 
@@ -120,7 +120,7 @@ The app can scan historical data and identify past periods that appear to match 
 
 ## Evidence shown to the user
 
-The app should show evidence, not just a final label.
+The app should show the evidence behind any label, not only the label itself.
 
 The user should be able to see:
 
@@ -221,7 +221,7 @@ Google Earth Engine is the geospatial processing engine of the project.
 
 The project should use Earth Engine to work with satellite, reanalysis, or related environmental datasets: ImageCollection filtering, daily compositing, spatial reductions, baseline/anomaly image generation, and other geospatial computation.
 
-Architecture update (owner decision, 2026-07-18): the public application is hosted entirely on Railway — a Railway-hosted frontend and a Railway backend/API that calls Earth Engine. The original idea of publishing the app as a separate Earth Engine App linked from a landing page is no longer the planned final architecture and remains only a possible fallback (see docs/architecture.md).
+Architecture update (owner decision, 2026-07-18): the public application is hosted entirely on Railway, as a Railway-hosted frontend and a Railway backend/API that calls Earth Engine. The original idea of publishing the app as a separate Earth Engine App linked from a landing page is no longer the planned final architecture and remains only a possible fallback (see docs/architecture.md).
 
 ## Role of R
 
@@ -264,9 +264,9 @@ The decided hosting approach (owner decision, 2026-07-18) is:
 - The backend authenticates to Earth Engine, so public users do not need their own Earth Engine accounts
 - AWS Route 53 for DNS because the user’s domain is managed there
 
-Status update (2026-07-19/20): the backend half of this architecture is implemented and live as an infrastructure proof of connection (Railway backend service, Earth Engine service-account authentication, and the api.neuralnetworks.me API domain all verified), and frontend/UI implementation has started; production integration and public deployment are incomplete. After the completed full-history daily regional-method audit, the canonical native-lattice regional calculation was selected as the production regional-statistics method (see docs/methodology.md). The remaining technology choices — frontend framework, map library, production API endpoint design, caching design, any database, the public map/tile grid, and the frontend hostname — remain open owner decisions (see docs/architecture.md and docs/ui-data-contract.md).
+Status update (2026-07-20): the decided architecture is deployed. The Railway backend (Earth Engine service-account authentication, api.neuralnetworks.me) and the Railway frontend (airquality.neuralnetworks.me) are live as a one-date public prototype. After the completed full-history daily regional-method audit, the canonical native-lattice regional calculation was selected as the production regional-statistics method (see docs/methodology.md). Remaining open owner decisions include the final frontend framework, the charting approach, caching/precomputation design, any database, and the episode-spatial-analysis grid (see docs/architecture.md and docs/ui-data-contract.md).
 
-The previous plan — a Google Earth Engine App linked from a simple Railway landing page — is no longer the planned final architecture and remains only a possible fallback.
+The previous plan (a Google Earth Engine App linked from a simple Railway landing page) is no longer the planned final architecture and remains only a possible fallback.
 
 The public application can provide:
 
