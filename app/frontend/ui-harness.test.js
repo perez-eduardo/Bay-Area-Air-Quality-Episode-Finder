@@ -709,6 +709,39 @@ test('CSS: dots are a fixed literal revealed by stepped width — the ' +
       /\.go\.is-loading \.dots::after \{ content: '…'; animation: none; width: auto; \}/);
 });
 
+test('masthead: no restrictive ch cap on the heading, desktop keeps ' +
+    'the title on one line, a mobile breakpoint restores wrapping, ' +
+    'and the About link stays present', function () {
+  var css = fs.readFileSync(
+      path.join(__dirname, 'public', 'app.css'), 'utf8');
+  var html = fs.readFileSync(
+      path.join(__dirname, 'public', 'index.html'), 'utf8');
+
+  // The artificial character-width cap is gone from every h1 rule.
+  assert.doesNotMatch(css, /24ch/);
+  assert.doesNotMatch(css, /\bh1 \{[^}]*max-width/);
+
+  // Desktop: one line via nowrap on the masthead heading, with the
+  // text column allowed to shrink (min-width: 0) instead of pushing
+  // the About link out or forcing horizontal page scrolling.
+  assert.match(css, /\.masthead h1 \{ white-space: nowrap; \}/);
+  assert.match(css, /\.mast-text \{ min-width: 0; \}/);
+
+  // A mobile breakpoint restores natural wrapping, balanced so no
+  // single orphan word lands alone on the last line.
+  var mq = css.match(/@media \(max-width: 760px\) \{[\s\S]*?\n\}/);
+  assert.ok(mq, 'mobile masthead breakpoint exists');
+  assert.match(mq[0], /\.masthead h1 \{ white-space: normal;[^}]*\}/);
+  assert.match(mq[0], /text-wrap: balance/);
+
+  // The masthead text column carries the class the CSS targets, and
+  // the About link remains at the masthead level.
+  assert.match(html, /<div class="wrap mast-flex">\s*<div class="mast-text">/);
+  assert.match(html, /<a class="about-link" id="aboutLink" href="\/about">About<\/a>/);
+  // The title text itself is unchanged.
+  assert.match(html, /<h1>Bay Area Air Quality Episode Finder<\/h1>/);
+});
+
 test('static markup: no navigation bar or EP mark; one plain About ' +
     'link; dialog content is exact and safe', function () {
   var html = fs.readFileSync(

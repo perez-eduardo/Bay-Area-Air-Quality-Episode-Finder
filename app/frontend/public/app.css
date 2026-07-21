@@ -78,7 +78,19 @@ body {
 .about-link:hover { color: var(--white); }
 .about-link:focus-visible { outline: 3px solid var(--white); outline-offset: 2px; }
 .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: #9fc0e8; margin: 0 0 12px; }
-h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; letter-spacing: -.021em; line-height: 1.08; margin: 0 0 12px; max-width: 24ch; }
+h1 { font-family: var(--display); font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; letter-spacing: -.021em; line-height: 1.08; margin: 0 0 12px; }
+/* Desktop: the full title stays on one line — no artificial ch cap.
+   The text column may shrink (min-width: 0) so the About link keeps
+   its place at the upper right without page-level horizontal
+   scrolling. */
+.mast-text { min-width: 0; }
+.masthead h1 { white-space: nowrap; }
+@media (max-width: 760px) {
+  /* Narrow screens: natural wrapping, balanced so a single word is
+     not left alone on the last line (text-wrap is a progressive
+     enhancement). */
+  .masthead h1 { white-space: normal; text-wrap: balance; }
+}
 .standfirst { font-size: 16.5px; font-weight: 300; color: #cddcf0; max-width: 64ch; margin: 0; }
 
 /* --------------------------------------------------- instrument strip */
