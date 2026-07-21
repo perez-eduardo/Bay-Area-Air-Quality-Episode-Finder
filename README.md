@@ -21,7 +21,7 @@ and is never presented as AQI. No feature detects or classifies
 air-quality episodes; episode detection is planned but not implemented
 (see [docs/roadmap.md](docs/roadmap.md)).
 
-## What the current version does
+## Function
 
 The application analyzes one Bay Area local calendar date at a time
 (America/Los_Angeles). For the selected date it:
@@ -45,7 +45,7 @@ The date picker is bounded by backend-supplied availability; the newest
 date represented in the collection is excluded because its ingestion
 may still be partial.
 
-## How the anomaly is defined
+## Defining the Anomaly
 
 The regional anomaly is the selected day's regional mean minus the
 median of pooled valid daily regional means from the same calendar
